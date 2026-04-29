@@ -1,0 +1,550 @@
+{% extends "layout.html" %}
+{% block title %}Validador VAR — Barril Dobrado{% endblock %}
+
+{% block content %}
+<div class="fade-in max-w-5xl mx-auto space-y-8 pb-12">
+
+    <!-- Cabeçalho -->
+    <div class="flex items-center justify-between border-b border-gray-100 pb-6">
+        <div>
+            <h2 class="text-2xl font-bold text-slate-900 tracking-tight">Validador VAR</h2>
+            <p class="text-sm text-slate-500 mt-1">Compare perfis com a base padrão e identifique divergências de acesso.</p>
+        </div>
+        <div class="flex items-center gap-2">
+            <button type="button" onclick="document.getElementById('modalConfig').classList.remove('hidden')"
+                    class="p-2 text-slate-400 hover:text-slate-700 hover:bg-gray-100 rounded-lg transition" title="Configurar Base VAR">
+                <i class="fas fa-cog"></i>
+            </button>
+            {% if is_var_active %}
+            <button type="button" onclick="verBaseAtiva()"
+                    class="p-2 text-slate-400 hover:text-slate-700 hover:bg-gray-100 rounded-lg transition" title="Visualizar base ativa">
+                <i class="fas fa-eye"></i>
+            </button>
+            <span class="px-3 py-1 rounded-lg text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 uppercase tracking-widest">
+                Base Ativa
+            </span>
+            {% else %}
+            <span class="px-3 py-1 rounded-lg text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 uppercase tracking-widest animate-pulse">
+                Base Inativa
+            </span>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Empty state -->
+    {% if not is_var_active %}
+    <div class="rounded-xl border border-amber-200 bg-amber-50 p-6 flex items-start gap-4">
+        <div class="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center flex-shrink-0">
+            <i class="fas fa-database text-amber-600"></i>
+        </div>
+        <div class="flex-1">
+            <p class="font-bold text-amber-900 text-sm">Nenhuma Base VAR ativa</p>
+            <p class="text-xs text-amber-700 mt-1">Configure e ative uma base antes de validar perfis.</p>
+            <button type="button" onclick="document.getElementById('modalConfig').classList.remove('hidden')"
+                    class="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg transition shadow-sm">
+                <i class="fas fa-cog"></i> Configurar Base VAR
+            </button>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="{{ 'opacity-50 pointer-events-none' if not is_var_active else '' }} space-y-8">
+
+        <!-- Seção 1: Módulo -->
+        <div>
+            <label class="block text-xs font-bold uppercase tracking-widest text-slate-500 mb-3">
+                1. Módulo
+            </label>
+            <div class="relative">
+                <select id="selectModulo" name="modulo"
+                        class="appearance-none block w-full py-2.5 pl-4 pr-10 text-sm border border-gray-200 rounded-xl bg-gray-50 text-slate-700 focus:outline-none focus:border-slate-400 focus:bg-white transition cursor-pointer font-medium hover:bg-white">
+                    {% for mod in modulos %}
+                        <option value="{{ mod }}">{{ mod }}</option>
+                    {% endfor %}
+                </select>
+                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-400">
+                    <i class="fas fa-chevron-down text-xs"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Seção 2: Upload -->
+        <div>
+            <label class="block text-xs font-bold uppercase tracking-widest text-slate-500 mb-3">
+                2. Relatório de Perfil
+            </label>
+            <div id="dropZone"
+                 class="relative border-2 border-dashed border-gray-300 rounded-xl p-10 text-center cursor-pointer hover:border-slate-400 hover:bg-gray-50 transition-all"
+                 onclick="document.getElementById('inputAnalise').click()">
+                <input type="file" id="inputAnalise" accept=".xlsx,.pdf" class="hidden">
+                <div id="drop-idle">
+                    <i class="fas fa-cloud-upload-alt text-3xl text-gray-300 mb-3 block"></i>
+                    <p class="text-sm font-medium text-gray-500">Clique ou arraste o arquivo</p>
+                    <p class="text-xs text-gray-400 mt-1">PDF TOTVS ou Excel (.xlsx)</p>
+                </div>
+                <div id="drop-selected" class="hidden">
+                    <i class="fas fa-check-circle text-3xl text-emerald-400 mb-3 block"></i>
+                    <p id="fileNameDisplay" class="text-sm font-semibold text-slate-700"></p>
+                    <button type="button" onclick="removerArquivo(event)"
+                            class="text-xs text-rose-500 hover:text-rose-700 mt-2 font-medium">
+                        Remover arquivo
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Botão -->
+        <div class="flex flex-col items-center gap-2">
+            <button id="btnSubmit" disabled onclick="submeterForm()"
+                    class="px-10 py-3 bg-slate-800 text-white text-sm font-semibold rounded-xl hover:bg-slate-700 active:scale-95 transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed">
+                <i class="fas fa-check-double mr-2"></i> Validar Perfil
+            </button>
+            <p id="hint-arquivo" class="text-xs text-gray-400">Selecione o arquivo para iniciar a validação</p>
+        </div>
+
+    </div>
+
+    <!-- Skeleton / resultado -->
+    <div id="mainResultCard" class="hidden rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+            <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+                <i class="fas fa-chart-pie text-slate-400"></i> Resultado da Validação
+            </h3>
+            <button type="button" id="btnOpenExportModal"
+                    class="hidden items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-1.5 px-3 rounded-lg shadow-sm transition">
+                <i class="fas fa-file-excel"></i> Exportar VAR
+            </button>
+        </div>
+        <div>
+            <div id="skeletonLoader" class="hidden p-4 space-y-2">
+                {% for _ in range(8) %}
+                <div class="flex gap-4 px-2 py-1">
+                    <div class="skeleton h-4 flex-1"></div>
+                    <div class="skeleton h-4 w-20"></div>
+                    <div class="skeleton h-4 flex-1"></div>
+                </div>
+                {% endfor %}
+            </div>
+            <div id="tableWrapper" class="w-full max-h-[500px] overflow-y-auto custom-scroll"></div>
+        </div>
+    </div>
+
+</div>
+
+<!-- Modal Configuração Base VAR -->
+<div id="modalConfig" class="fixed inset-0 bg-slate-900/60 hidden z-50 flex items-center justify-center backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden">
+        <div class="px-5 py-4 border-b border-gray-100 flex justify-between items-center">
+            <h3 class="font-bold text-sm text-slate-800">Configuração Base VAR</h3>
+            <button type="button" onclick="document.getElementById('modalConfig').classList.add('hidden')"
+                    class="text-gray-400 hover:text-slate-700 transition p-1 rounded-lg hover:bg-gray-100"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="p-5">
+            <form id="formUploadVar" onsubmit="uploadVar(event)" class="flex gap-3 mb-5">
+                <input type="file" name="file" required
+                       class="block w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-slate-50 file:text-slate-700 hover:file:bg-slate-100 cursor-pointer border border-gray-200 rounded-lg">
+                <button type="submit" id="btnUploadVar"
+                        class="bg-slate-800 text-white text-xs font-bold py-2 px-5 rounded-lg hover:bg-slate-900 flex items-center justify-center gap-2 flex-shrink-0">
+                    Enviar
+                </button>
+            </form>
+            <div class="border border-gray-100 rounded-xl overflow-hidden max-h-64 overflow-y-auto custom-scroll">
+                <table class="min-w-full divide-y divide-gray-100 text-[10px]">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-3 py-2 text-left text-gray-400 font-bold uppercase tracking-wider">Arquivo</th>
+                            <th class="px-3 py-2 text-left text-gray-400 font-bold uppercase tracking-wider">Data</th>
+                            <th class="px-3 py-2 text-right text-gray-400 font-bold uppercase tracking-wider">Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody id="listaHistorico" class="divide-y divide-gray-50 bg-white">
+                        {% for item in historico %}
+                        <tr class="hover:bg-slate-50">
+                            <td class="px-3 py-2 text-slate-600 truncate max-w-xs font-medium">{{ item.nome_arquivo_original }}</td>
+                            <td class="px-3 py-2 text-slate-400 font-mono text-[9px]">{{ item.timestamp_formatado }}</td>
+                            <td class="px-3 py-2 text-right flex items-center justify-end gap-3">
+                                {% if item.status != 'Ativo' %}
+                                    <button type="button" onclick="ativarVar({{ item.id }})" class="text-slate-700 font-bold hover:underline">Ativar</button>
+                                    <button type="button" onclick="excluirVar({{ item.id }})" class="text-gray-300 hover:text-rose-500 transition"><i class="fas fa-trash"></i></button>
+                                {% else %}
+                                    <span class="text-emerald-600 font-bold">Ativo</span>
+                                    <span class="text-gray-200 cursor-not-allowed"><i class="fas fa-trash"></i></span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Visualizar Base -->
+<div id="modalVisualizarBase" class="fixed inset-0 bg-slate-900/60 hidden z-50 flex items-center justify-center backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl mx-4 overflow-hidden flex flex-col max-h-[90vh]">
+        <div class="px-5 py-4 border-b border-gray-100 flex justify-between items-center">
+            <div>
+                <h3 class="font-bold text-sm text-slate-800"><i class="fas fa-database text-emerald-500 mr-2"></i>Conteúdo da Base Ativa</h3>
+                <p class="text-[10px] text-gray-400 mt-0.5">Visualizando dados carregados no sistema.</p>
+            </div>
+            <button type="button" onclick="document.getElementById('modalVisualizarBase').classList.add('hidden')"
+                    class="text-gray-400 hover:text-slate-700 transition p-1 rounded-lg hover:bg-gray-100"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="px-5 py-3 border-b border-gray-100">
+            <div class="relative">
+                <i class="fas fa-search absolute left-3 top-2.5 text-gray-400 text-xs"></i>
+                <input type="text" id="inputBuscaBase" onkeyup="filtrarBase()"
+                       placeholder="Buscar por código, funcionalidade ou módulo..."
+                       class="w-full pl-9 pr-4 py-2 text-xs border border-gray-200 rounded-lg focus:border-slate-400 focus:bg-white outline-none transition bg-gray-50 focus:bg-white">
+            </div>
+        </div>
+        <div class="flex-1 overflow-auto custom-scroll">
+            <div id="loadingBase" class="hidden p-10 text-center text-gray-400">
+                <div class="w-8 h-8 border-4 border-slate-200 border-t-slate-600 rounded-full animate-spin mx-auto mb-3"></div>
+                <p class="text-xs">Carregando dados...</p>
+            </div>
+            <table class="w-full text-xs text-left border-collapse">
+                <thead class="bg-white sticky top-0 shadow-sm z-10">
+                    <tr>
+                        <th class="px-4 py-3 bg-gray-50 font-bold text-gray-500 border-b border-gray-100 uppercase tracking-wider text-[10px]">ID Func.</th>
+                        <th class="px-4 py-3 bg-gray-50 font-bold text-gray-500 border-b border-gray-100 uppercase tracking-wider text-[10px]">Funcionalidade</th>
+                        <th class="px-4 py-3 bg-gray-50 font-bold text-gray-500 border-b border-gray-100 uppercase tracking-wider text-[10px]">ID Módulo</th>
+                        <th class="px-4 py-3 bg-gray-50 font-bold text-gray-500 border-b border-gray-100 uppercase tracking-wider text-[10px]">Módulo</th>
+                    </tr>
+                </thead>
+                <tbody id="tabelaBaseBody" class="divide-y divide-gray-100 text-slate-600"></tbody>
+            </table>
+        </div>
+        <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 flex justify-end">
+            <button type="button" onclick="document.getElementById('modalVisualizarBase').classList.add('hidden')"
+                    class="px-4 py-2 bg-white border border-gray-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-gray-50 transition">Fechar</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Confirmação de Exclusão -->
+<div id="modalConfirmDelete" class="fixed inset-0 bg-slate-900/60 hidden z-50 flex items-center justify-center backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden">
+        <div class="px-5 py-4 border-b border-gray-100 flex items-center gap-3">
+            <div class="w-8 h-8 bg-rose-100 rounded-full flex items-center justify-center flex-shrink-0">
+                <i class="fas fa-trash text-rose-600 text-sm"></i>
+            </div>
+            <div>
+                <h3 class="font-bold text-sm text-slate-800">Confirmar exclusão</h3>
+                <p class="text-xs text-gray-400">Essa ação não pode ser desfeita.</p>
+            </div>
+        </div>
+        <div class="p-5">
+            <p class="text-sm text-slate-600">Deseja realmente excluir este arquivo da base VAR?</p>
+        </div>
+        <div class="px-5 py-3 bg-gray-50 flex justify-end gap-2">
+            <button type="button" id="btnCancelDelete"
+                    class="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-700 border border-gray-200 rounded-lg hover:bg-white transition">Cancelar</button>
+            <button type="button" id="btnConfirmDelete"
+                    class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow-sm transition">Excluir</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Exportação -->
+<div id="modalExport" class="fixed inset-0 bg-slate-900/60 hidden z-50 flex items-center justify-center backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden">
+        <div class="px-5 py-4 border-b border-gray-100 flex items-center gap-3">
+            <div class="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0">
+                <i class="fas fa-file-excel text-emerald-600 text-sm"></i>
+            </div>
+            <div>
+                <h3 class="font-bold text-sm text-slate-800">Exportar para VAR</h3>
+                <p class="text-xs text-gray-400">Dados obrigatórios para o arquivo.</p>
+            </div>
+        </div>
+        <div class="p-5 space-y-4">
+            <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Código do Perfil</label>
+                <input type="text" id="exportPerfilNome" placeholder="Ex: Z_COMPRAS"
+                       class="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-xs focus:border-slate-400 focus:bg-white focus:ring-0 outline-none uppercase transition bg-gray-50">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">ID do Perfil (Numérico)</label>
+                <input type="number" id="exportPerfilId" placeholder="Ex: 1024"
+                       class="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-xs focus:border-slate-400 focus:bg-white focus:ring-0 outline-none transition bg-gray-50">
+            </div>
+        </div>
+        <div class="px-5 py-3 bg-gray-50 flex justify-end gap-2">
+            <button type="button" id="btnCancelExport"
+                    class="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-700 border border-gray-200 rounded-lg hover:bg-white transition">Cancelar</button>
+            <button type="button" id="btnConfirmExport"
+                    class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 px-5 rounded-lg shadow-sm transition">Baixar</button>
+        </div>
+    </div>
+</div>
+
+<style>
+    .fade-in { animation: fadeIn 0.5s ease-out forwards; opacity: 0; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes shimmer { 0% { background-position: -600px 0; } 100% { background-position: 600px 0; } }
+    .skeleton { background: linear-gradient(90deg,#f1f5f9 25%,#e2e8f0 50%,#f1f5f9 75%); background-size: 600px 100%; animation: shimmer 1.4s infinite; border-radius: 4px; }
+    .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // --- Drop zone ---
+    const dropZone  = document.getElementById('dropZone');
+    const fileInput = document.getElementById('inputAnalise');
+    const dropIdle  = document.getElementById('drop-idle');
+    const dropSel   = document.getElementById('drop-selected');
+    const fileNameDisplay = document.getElementById('fileNameDisplay');
+    const btnSubmit = document.getElementById('btnSubmit');
+    const hintArquivo = document.getElementById('hint-arquivo');
+
+    ['dragenter','dragover','dragleave','drop'].forEach(ev =>
+        dropZone.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); }));
+    ['dragenter','dragover'].forEach(ev =>
+        dropZone.addEventListener(ev, () => dropZone.classList.add('border-slate-400','bg-gray-50')));
+    ['dragleave','drop'].forEach(ev =>
+        dropZone.addEventListener(ev, () => dropZone.classList.remove('border-slate-400','bg-gray-50')));
+
+    dropZone.addEventListener('drop', e => {
+        const f = e.dataTransfer.files[0];
+        if (f) { fileInput.files = e.dataTransfer.files; mostrarArquivo(f.name); }
+    });
+    fileInput.addEventListener('change', function() {
+        if (this.files[0]) mostrarArquivo(this.files[0].name);
+    });
+
+    function mostrarArquivo(nome) {
+        dropIdle.classList.add('hidden');
+        dropSel.classList.remove('hidden');
+        fileNameDisplay.textContent = nome;
+        dropZone.classList.add('border-emerald-300','bg-emerald-50/30');
+        dropZone.classList.remove('border-gray-300');
+        btnSubmit.disabled = false;
+        hintArquivo.textContent = 'Pronto para validar!';
+        hintArquivo.className = 'text-xs text-emerald-600 font-medium';
+    }
+
+    function removerArquivo(e) {
+        e.stopPropagation();
+        fileInput.value = '';
+        dropIdle.classList.remove('hidden');
+        dropSel.classList.add('hidden');
+        dropZone.classList.remove('border-emerald-300','bg-emerald-50/30');
+        dropZone.classList.add('border-gray-300');
+        btnSubmit.disabled = true;
+        hintArquivo.textContent = 'Selecione o arquivo para iniciar a validação';
+        hintArquivo.className = 'text-xs text-gray-400';
+        document.getElementById('mainResultCard').classList.add('hidden');
+    }
+
+    // --- Submit ---
+    let globalResultados = null;
+
+    function submeterForm() {
+        const formData = new FormData();
+        formData.append('arquivo_analise', fileInput.files[0]);
+        formData.append('modulo', document.getElementById('selectModulo').value);
+
+        const mainCard = document.getElementById('mainResultCard');
+        const tableWrapper = document.getElementById('tableWrapper');
+        const skeleton = document.getElementById('skeletonLoader');
+        const btnOpenExport = document.getElementById('btnOpenExportModal');
+
+        btnSubmit.disabled = true;
+        btnSubmit.innerHTML = '<i class="fas fa-circle-notch fa-spin mr-2"></i> Validando...';
+
+        mainCard.classList.remove('hidden');
+        tableWrapper.innerHTML = '';
+        skeleton.classList.remove('hidden');
+        btnOpenExport.classList.add('hidden');
+        mainCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+        fetch("{{ url_for('comparar') }}", { method: 'POST', body: formData })
+        .then(r => r.json())
+        .then(data => {
+            skeleton.classList.add('hidden');
+            btnSubmit.disabled = false;
+            btnSubmit.innerHTML = '<i class="fas fa-check-double mr-2"></i> Validar Perfil';
+
+            if (data.erro) {
+                tableWrapper.innerHTML = `<div class='p-8 text-center text-rose-500 font-bold text-sm'><i class="fas fa-bug mb-2 text-xl block"></i>${data.erro}</div>`;
+                showToast(data.erro, 'error');
+                return;
+            }
+            globalResultados = data.resultados;
+            renderTabela(data.resultados);
+            btnOpenExport.classList.remove('hidden');
+            btnOpenExport.classList.add('flex');
+            showToast('Validação concluída!', 'success');
+        })
+        .catch(() => {
+            skeleton.classList.add('hidden');
+            btnSubmit.disabled = false;
+            btnSubmit.innerHTML = '<i class="fas fa-check-double mr-2"></i> Validar Perfil';
+            showToast('Erro de conexão.', 'error');
+        });
+    }
+
+    function renderTabela(dados) {
+        const tableWrapper = document.getElementById('tableWrapper');
+        let html = `
+            <table class="min-w-full divide-y divide-gray-200 text-xs text-left">
+                <thead class="bg-gray-50 sticky top-0 z-10">
+                    <tr>
+                        <th class="px-6 py-3 font-bold uppercase text-slate-500 tracking-wider w-5/12">Funcionalidade</th>
+                        <th class="px-6 py-3 font-bold uppercase text-slate-500 tracking-wider text-center w-2/12">Status</th>
+                        <th class="px-6 py-3 font-bold uppercase text-slate-500 tracking-wider w-5/12">Base VAR</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-100">`;
+        dados.forEach(row => {
+            let badge = '';
+            if (row.Status === 'Encontrado')
+                badge = `<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800"><i class="fas fa-check mr-1.5"></i>OK</span>`;
+            else if (row.Status === 'Divergente')
+                badge = `<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800"><i class="fas fa-times mr-1.5"></i>Divergente</span>`;
+            else
+                badge = `<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800"><i class="fas fa-search mr-1.5"></i>Sugestão</span>`;
+            html += `
+                <tr class="hover:bg-slate-50 transition-colors">
+                    <td class="px-6 py-3 font-medium text-slate-700 break-words">${row['Funcionalidade Analisada']}</td>
+                    <td class="px-6 py-3 text-center">
+                        ${badge}
+                        <div class="text-[10px] text-slate-400 mt-0.5 font-mono">${row['Similaridade (%)']}%</div>
+                    </td>
+                    <td class="px-6 py-3 text-slate-600">
+                        ${row['Sugestão Similar (VAR)']
+                            ? `<div class='flex flex-col'><span class='font-bold text-slate-900'>${row['Sugestão Similar (VAR)']}</span><span class='text-[10px] text-gray-400'>ID: ${row['ID Encontrado'] || row['ID Sugerido']}</span></div>`
+                            : '<span class="text-gray-300 italic">—</span>'}
+                    </td>
+                </tr>`;
+        });
+        html += `</tbody></table>`;
+        tableWrapper.innerHTML = html;
+    }
+
+    // --- Histórico / Base VAR ---
+    function atualizarHistorico() {
+        fetch('/listar_historico').then(r => r.json()).then(data => {
+            const tbody = document.getElementById('listaHistorico');
+            if (data.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="3" class="text-center py-4 text-gray-400 text-[10px]">Nenhum arquivo enviado.</td></tr>`;
+                return;
+            }
+            tbody.innerHTML = data.map(item => {
+                const acoes = item.status !== 'Ativo'
+                    ? `<button onclick="ativarVar(${item.id})" class="text-slate-700 font-bold hover:underline">Ativar</button>
+                       <button onclick="excluirVar(${item.id})" class="text-gray-300 hover:text-rose-500 transition ml-2"><i class="fas fa-trash"></i></button>`
+                    : `<span class="text-emerald-600 font-bold">Ativo</span>
+                       <span class="text-gray-200 ml-2 cursor-not-allowed"><i class="fas fa-trash"></i></span>`;
+                return `<tr class="hover:bg-slate-50">
+                    <td class="px-3 py-2 text-slate-600 truncate max-w-xs font-medium">${item.nome_arquivo_original}</td>
+                    <td class="px-3 py-2 text-slate-400 font-mono text-[9px]">${item.timestamp_formatado}</td>
+                    <td class="px-3 py-2 text-right flex items-center justify-end gap-3">${acoes}</td>
+                </tr>`;
+            }).join('');
+        });
+    }
+
+    function uploadVar(e) {
+        e.preventDefault();
+        const btn = document.getElementById('btnUploadVar');
+        btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i>';
+        btn.disabled = true;
+        fetch('/upload_var', { method: 'POST', body: new FormData(document.getElementById('formUploadVar')) })
+            .then(r => r.json())
+            .then(data => {
+                showToast(data.message, data.success ? 'success' : 'error');
+                if (data.success) { document.getElementById('formUploadVar').reset(); atualizarHistorico(); }
+            })
+            .catch(() => showToast('Erro de conexão.', 'error'))
+            .finally(() => { btn.innerHTML = 'Enviar'; btn.disabled = false; });
+    }
+
+    function ativarVar(id) {
+        showToast('Ativando...', 'info');
+        fetch(`/ativar_var/${id}`).then(r => r.json()).then(data => {
+            showToast(data.message, data.success ? 'success' : 'error');
+            if (data.success) { atualizarHistorico(); setTimeout(() => location.reload(), 1500); }
+        }).catch(() => showToast('Erro ao ativar.', 'error'));
+    }
+
+    let _pendingDeleteId = null;
+    function excluirVar(id) { _pendingDeleteId = id; document.getElementById('modalConfirmDelete').classList.remove('hidden'); }
+    document.getElementById('btnCancelDelete').onclick = () => {
+        _pendingDeleteId = null;
+        document.getElementById('modalConfirmDelete').classList.add('hidden');
+    };
+    document.getElementById('btnConfirmDelete').onclick = () => {
+        if (!_pendingDeleteId) return;
+        const id = _pendingDeleteId; _pendingDeleteId = null;
+        document.getElementById('modalConfirmDelete').classList.add('hidden');
+        fetch(`/excluir_var/${id}`).then(r => r.json()).then(data => {
+            showToast(data.message, data.success ? 'success' : 'error');
+            if (data.success) atualizarHistorico();
+        }).catch(() => showToast('Erro ao excluir.', 'error'));
+    };
+
+    function verBaseAtiva() {
+        const modal = document.getElementById('modalVisualizarBase');
+        const tbody = document.getElementById('tabelaBaseBody');
+        const loading = document.getElementById('loadingBase');
+        tbody.innerHTML = '';
+        document.getElementById('inputBuscaBase').value = '';
+        modal.classList.remove('hidden');
+        loading.classList.remove('hidden');
+        fetch('/visualizar_base_ativa').then(r => r.json()).then(data => {
+            loading.classList.add('hidden');
+            if (data.erro) { tbody.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-rose-500 font-bold">${data.erro}</td></tr>`; return; }
+            if (data.length === 0) { tbody.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-gray-400 italic">Nenhum registro.</td></tr>`; return; }
+            tbody.innerHTML = data.map(row => `
+                <tr class="hover:bg-slate-50 transition-colors search-item">
+                    <td class="px-4 py-2 font-mono text-[10px] text-gray-400">${row['ID Funcionalidade']||'—'}</td>
+                    <td class="px-4 py-2 font-medium text-slate-700 search-text">${row['Funcionalidade']}</td>
+                    <td class="px-4 py-2 font-mono text-[10px] text-gray-400">${row['ID Módulo']||'—'}</td>
+                    <td class="px-4 py-2 text-gray-500 search-text">${row['Módulo']||'—'}</td>
+                </tr>`).join('');
+        }).catch(() => { loading.classList.add('hidden'); showToast('Erro ao carregar dados.', 'error'); });
+    }
+
+    function filtrarBase() {
+        const termo = document.getElementById('inputBuscaBase').value.toLowerCase();
+        document.querySelectorAll('.search-item').forEach(l => {
+            l.style.display = l.textContent.toLowerCase().includes(termo) ? '' : 'none';
+        });
+    }
+
+    // --- Export ---
+    const modalExport = document.getElementById('modalExport');
+    document.getElementById('btnOpenExportModal').onclick = () => {
+        document.getElementById('exportPerfilNome').value = '';
+        document.getElementById('exportPerfilId').value = '';
+        modalExport.classList.remove('hidden');
+    };
+    document.getElementById('btnCancelExport').onclick = () => modalExport.classList.add('hidden');
+    document.getElementById('btnConfirmExport').onclick = () => {
+        const nome = document.getElementById('exportPerfilNome').value.toUpperCase();
+        const id   = document.getElementById('exportPerfilId').value;
+        if (!nome || !id) { showToast('Preencha Código e ID do perfil.', 'error'); return; }
+        const btn = document.getElementById('btnConfirmExport');
+        btn.textContent = 'Gerando...'; btn.disabled = true;
+        fetch("{{ url_for('gerar_importacao') }}", {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ resultados: globalResultados, perfil_nome: nome, perfil_id: id })
+        }).then(r => r.blob()).then(blob => {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = `Importar VAR - ${nome} - ${new Date().toISOString().split('T')[0]}.xlsx`;
+            document.body.appendChild(a); a.click(); a.remove();
+            modalExport.classList.add('hidden');
+            showToast('Download iniciado!', 'success');
+        }).catch(() => showToast('Erro ao gerar arquivo.', 'error'))
+          .finally(() => { btn.textContent = 'Baixar'; btn.disabled = false; });
+    };
+</script>
+{% endblock %}

@@ -1,0 +1,317 @@
+{% extends "layout.html" %}
+
+{% block title %}Usuários — Barril Dobrado{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-8">
+
+    <div class="flex items-center justify-between">
+        <div>
+            <h2 class="text-2xl font-bold text-slate-900 tracking-tight">Gerenciar Usuários</h2>
+            <p class="text-sm text-gray-400 mt-1">Crie, edite e controle o acesso dos usuários ao sistema.</p>
+        </div>
+        <button onclick="abrirModalCriar()"
+                class="flex items-center gap-2 px-5 py-2.5 bg-slate-800 text-white text-sm font-semibold rounded-xl hover:bg-slate-700 active:scale-95 transition-all shadow-sm">
+            <i class="fas fa-plus"></i>
+            <span class="hidden sm:inline">Novo Usuário</span>
+        </button>
+    </div>
+
+    <!-- Tabela de usuários -->
+    <div class="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="border-b border-gray-100 bg-gray-50">
+                    <th class="text-left px-5 py-3 text-xs font-bold uppercase tracking-widest text-slate-500">Usuário</th>
+                    <th class="text-left px-5 py-3 text-xs font-bold uppercase tracking-widest text-slate-500 hidden sm:table-cell">Perfil</th>
+                    <th class="text-left px-5 py-3 text-xs font-bold uppercase tracking-widest text-slate-500 hidden md:table-cell">Último acesso</th>
+                    <th class="text-left px-5 py-3 text-xs font-bold uppercase tracking-widest text-slate-500">Status</th>
+                    <th class="px-5 py-3"></th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100" id="tabela-usuarios">
+                {% for u in usuarios %}
+                <tr class="hover:bg-gray-50 transition" id="row-{{ u['id'] }}">
+                    <td class="px-5 py-4">
+                        <div class="flex items-center gap-3">
+                            <div class="h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0
+                                {{ 'bg-slate-800 text-white' if u['role'] == 'admin' else 'bg-gray-200 text-gray-600' }}">
+                                {{ u['username'][0] | upper }}
+                            </div>
+                            <div>
+                                <p class="font-semibold text-slate-800">{{ u['username'] }}</p>
+                                {% if u['nome_completo'] %}
+                                <p class="text-xs text-gray-400">{{ u['nome_completo'] }}</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </td>
+                    <td class="px-5 py-4 hidden sm:table-cell">
+                        {% if u['role'] == 'admin' %}
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-900 text-white">
+                            <i class="fas fa-shield-alt text-[9px]"></i> Admin
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-600">
+                            <i class="fas fa-user text-[9px]"></i> Usuário
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="px-5 py-4 text-xs text-gray-400 hidden md:table-cell">
+                        {{ u['ultimo_acesso'] or 'Nunca acessou' }}
+                    </td>
+                    <td class="px-5 py-4">
+                        {% if u['ativo'] %}
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700">
+                            <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span> Ativo
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-400">
+                            <span class="h-1.5 w-1.5 rounded-full bg-gray-300"></span> Inativo
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="px-5 py-4">
+                        <div class="flex items-center justify-end gap-1">
+                            <button onclick="abrirModalEditar({{ u['id'] }}, '{{ u['username'] }}', '{{ u['nome_completo'] | e }}', '{{ u['role'] }}')"
+                                    title="Editar"
+                                    class="p-2 text-gray-400 hover:text-slate-700 hover:bg-gray-100 rounded-lg transition">
+                                <i class="fas fa-pencil-alt text-xs"></i>
+                            </button>
+                            {% if u['username'] != current_user %}
+                            <button onclick="toggleUsuario({{ u['id'] }}, {{ u['ativo'] }})"
+                                    title="{{ 'Desativar' if u['ativo'] else 'Ativar' }}"
+                                    class="p-2 text-gray-400 hover:text-slate-700 hover:bg-gray-100 rounded-lg transition" id="btn-toggle-{{ u['id'] }}">
+                                <i class="fas {{ 'fa-eye-slash' if u['ativo'] else 'fa-eye' }} text-xs"></i>
+                            </button>
+                            <button onclick="abrirModalExcluir({{ u['id'] }}, '{{ u['username'] }}')"
+                                    title="Excluir"
+                                    class="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition">
+                                <i class="fas fa-trash text-xs"></i>
+                            </button>
+                            {% else %}
+                            <span class="px-2 py-1 text-xs text-gray-300 italic">você</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+</div>
+
+<!-- Modal: Criar usuário -->
+<div id="modal-criar" class="fixed inset-0 bg-black/40 z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-8" onclick="event.stopPropagation()">
+        <div class="flex items-center justify-between mb-6">
+            <h3 class="text-lg font-bold text-slate-900">Novo Usuário</h3>
+            <button onclick="fecharModal('modal-criar')" class="text-gray-400 hover:text-gray-600 transition">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="space-y-4">
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-widest text-slate-500 mb-2">Usuário *</label>
+                <input id="criar-username" type="text" autocomplete="off"
+                       class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-slate-400 outline-none transition"
+                       placeholder="ex: joao.silva">
+            </div>
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-widest text-slate-500 mb-2">Nome Completo</label>
+                <input id="criar-nome" type="text" autocomplete="off"
+                       class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-slate-400 outline-none transition"
+                       placeholder="João Silva">
+            </div>
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-widest text-slate-500 mb-2">Senha *</label>
+                <input id="criar-senha" type="password" autocomplete="new-password"
+                       class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-slate-400 outline-none transition"
+                       placeholder="Mínimo 6 caracteres">
+            </div>
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-widest text-slate-500 mb-2">Perfil</label>
+                <select id="criar-role"
+                        class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-slate-400 outline-none transition">
+                    <option value="user">Usuário</option>
+                    <option value="admin">Administrador</option>
+                </select>
+            </div>
+        </div>
+        <div class="flex gap-3 mt-6">
+            <button onclick="fecharModal('modal-criar')"
+                    class="flex-1 px-4 py-2.5 text-sm font-medium border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 transition">
+                Cancelar
+            </button>
+            <button onclick="criarUsuario()"
+                    class="flex-1 px-4 py-2.5 text-sm font-semibold bg-slate-800 text-white rounded-xl hover:bg-slate-700 transition">
+                Criar Usuário
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Editar usuário -->
+<div id="modal-editar" class="fixed inset-0 bg-black/40 z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-8" onclick="event.stopPropagation()">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h3 class="text-lg font-bold text-slate-900">Editar Usuário</h3>
+                <p class="text-xs text-gray-400 mt-0.5" id="editar-username-label"></p>
+            </div>
+            <button onclick="fecharModal('modal-editar')" class="text-gray-400 hover:text-gray-600 transition">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <input type="hidden" id="editar-id">
+        <div class="space-y-4">
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-widest text-slate-500 mb-2">Nome Completo</label>
+                <input id="editar-nome" type="text"
+                       class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-slate-400 outline-none transition"
+                       placeholder="Nome completo">
+            </div>
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-widest text-slate-500 mb-2">Nova Senha <span class="text-gray-400 normal-case font-normal">(deixe em branco para manter)</span></label>
+                <input id="editar-senha" type="password" autocomplete="new-password"
+                       class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-slate-400 outline-none transition"
+                       placeholder="Nova senha">
+            </div>
+            <div id="editar-role-wrapper">
+                <label class="block text-xs font-bold uppercase tracking-widest text-slate-500 mb-2">Perfil</label>
+                <select id="editar-role"
+                        class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-slate-400 outline-none transition">
+                    <option value="user">Usuário</option>
+                    <option value="admin">Administrador</option>
+                </select>
+            </div>
+        </div>
+        <div class="flex gap-3 mt-6">
+            <button onclick="fecharModal('modal-editar')"
+                    class="flex-1 px-4 py-2.5 text-sm font-medium border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 transition">
+                Cancelar
+            </button>
+            <button onclick="editarUsuario()"
+                    class="flex-1 px-4 py-2.5 text-sm font-semibold bg-slate-800 text-white rounded-xl hover:bg-slate-700 transition">
+                Salvar
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Confirmar exclusão -->
+<div id="modal-excluir" class="fixed inset-0 bg-black/40 z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm p-8" onclick="event.stopPropagation()">
+        <div class="text-center mb-6">
+            <div class="h-14 w-14 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-trash fa-lg"></i>
+            </div>
+            <h3 class="text-lg font-bold text-slate-900">Excluir Usuário</h3>
+            <p class="text-sm text-gray-500 mt-2">Tem certeza que deseja excluir <strong id="excluir-username-label"></strong>? Esta ação não pode ser desfeita.</p>
+        </div>
+        <input type="hidden" id="excluir-id">
+        <div class="flex gap-3">
+            <button onclick="fecharModal('modal-excluir')"
+                    class="flex-1 px-4 py-2.5 text-sm font-medium border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 transition">
+                Cancelar
+            </button>
+            <button onclick="excluirUsuario()"
+                    class="flex-1 px-4 py-2.5 text-sm font-semibold bg-rose-600 text-white rounded-xl hover:bg-rose-700 transition">
+                Excluir
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const currentUser = {{ current_user | tojson }};
+
+function abrirModalCriar() {
+    document.getElementById('criar-username').value = '';
+    document.getElementById('criar-nome').value = '';
+    document.getElementById('criar-senha').value = '';
+    document.getElementById('criar-role').value = 'user';
+    document.getElementById('modal-criar').classList.remove('hidden');
+    setTimeout(() => document.getElementById('criar-username').focus(), 50);
+}
+
+function abrirModalEditar(id, username, nome, role) {
+    document.getElementById('editar-id').value = id;
+    document.getElementById('editar-username-label').textContent = '@' + username;
+    document.getElementById('editar-nome').value = nome;
+    document.getElementById('editar-senha').value = '';
+    document.getElementById('editar-role').value = role;
+    // Não permite rebaixar a si mesmo
+    document.getElementById('editar-role-wrapper').style.opacity = (username === currentUser) ? '0.4' : '1';
+    document.getElementById('editar-role').disabled = (username === currentUser);
+    document.getElementById('modal-editar').classList.remove('hidden');
+    setTimeout(() => document.getElementById('editar-nome').focus(), 50);
+}
+
+function abrirModalExcluir(id, username) {
+    document.getElementById('excluir-id').value = id;
+    document.getElementById('excluir-username-label').textContent = username;
+    document.getElementById('modal-excluir').classList.remove('hidden');
+}
+
+function fecharModal(id) {
+    document.getElementById(id).classList.add('hidden');
+}
+
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') ['modal-criar','modal-editar','modal-excluir'].forEach(fecharModal);
+});
+
+async function criarUsuario() {
+    const payload = {
+        username: document.getElementById('criar-username').value.trim(),
+        nome_completo: document.getElementById('criar-nome').value.trim(),
+        password: document.getElementById('criar-senha').value,
+        role: document.getElementById('criar-role').value,
+    };
+    const r = await fetch('/admin/usuarios/criar', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+    });
+    const data = await r.json();
+    showToast(data.message, r.ok ? 'success' : 'error');
+    if (r.ok) { fecharModal('modal-criar'); setTimeout(() => location.reload(), 800); }
+}
+
+async function editarUsuario() {
+    const id = document.getElementById('editar-id').value;
+    const payload = {
+        nome_completo: document.getElementById('editar-nome').value.trim(),
+        password: document.getElementById('editar-senha').value,
+        role: document.getElementById('editar-role').value,
+    };
+    const r = await fetch(`/admin/usuarios/${id}/editar`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+    });
+    const data = await r.json();
+    showToast(data.message, r.ok ? 'success' : 'error');
+    if (r.ok) { fecharModal('modal-editar'); setTimeout(() => location.reload(), 800); }
+}
+
+async function toggleUsuario(id, ativoAtual) {
+    const r = await fetch(`/admin/usuarios/${id}/toggle`, { method: 'POST' });
+    const data = await r.json();
+    showToast(data.message, r.ok ? 'success' : 'error');
+    if (r.ok) setTimeout(() => location.reload(), 800);
+}
+
+async function excluirUsuario() {
+    const id = document.getElementById('excluir-id').value;
+    const r = await fetch(`/admin/usuarios/${id}/excluir`, { method: 'POST' });
+    const data = await r.json();
+    showToast(data.message, r.ok ? 'success' : 'error');
+    if (r.ok) { fecharModal('modal-excluir'); setTimeout(() => location.reload(), 800); }
+}
+</script>
+{% endblock %}

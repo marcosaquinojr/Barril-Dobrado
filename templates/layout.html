@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}Barril Dobrado Tecnologia{% endblock %}</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛢️</text></svg>">
+    <script src="https://cdn.tailwindcss.com/3.4.1"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f9fafb; }
+        details > summary { list-style: none; }
+        details > summary::-webkit-details-marker { display: none; }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+        .toast-enter { animation: slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .toast-exit { animation: fadeOut 0.3s ease-in forwards; }
+    </style>
+    {% block head_extra %}{% endblock %}
+</head>
+<body class="text-slate-800 bg-gray-50 min-h-screen flex flex-col antialiased">
+
+    <div id="toast-container" class="fixed top-6 right-6 z-50 flex flex-col gap-3 pointer-events-none"></div>
+
+    <div class="container max-w-7xl mx-auto my-8 p-6 bg-white rounded-2xl shadow-sm border border-gray-200 flex-grow">
+        <header class="flex flex-col md:flex-row justify-between items-center mb-10 border-b border-gray-100 pb-6">
+            <a href="{{ url_for('home') }}" class="flex items-center gap-4 cursor-pointer group" title="Ir para início">
+                <div class="h-12 w-12 bg-gradient-to-br from-gray-700 to-gray-900 text-white rounded-xl flex items-center justify-center shadow-lg transform group-hover:scale-105 transition-all duration-300">
+                    <i class="fas fa-database fa-lg"></i>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-900 tracking-tight group-hover:text-gray-600 transition-colors">Barril Dobrado</h1>
+                    <p class="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Perfis TOTVS sem complicação</p>
+                </div>
+            </a>
+            <div class="mt-6 md:mt-0 flex items-center gap-2">
+                <nav class="flex p-1 bg-gray-100 rounded-lg">
+                    <a href="{{ url_for('validator') }}" title="Validador VAR"
+                       class="px-3 sm:px-5 py-2 text-sm font-medium rounded-md transition-all {{ 'bg-white text-gray-900 shadow-sm' if active_app == 'validator' else 'text-gray-500 hover:text-gray-700' }}">
+                        <i class="fas fa-check-double {{ 'text-gray-800' if active_app == 'validator' else 'text-gray-400' }}"></i>
+                        <span class="hidden sm:inline ml-2">Validador</span>
+                    </a>
+                    <a href="{{ url_for('sod_analyzer') }}" title="Analisador SoD"
+                       class="px-3 sm:px-5 py-2 text-sm font-medium rounded-md transition-all {{ 'bg-white text-gray-900 shadow-sm' if active_app == 'sod_analyzer' else 'text-gray-500 hover:text-gray-700' }}">
+                        <i class="fas fa-shield-alt {{ 'text-gray-800' if active_app == 'sod_analyzer' else 'text-gray-400' }}"></i>
+                        <span class="hidden sm:inline ml-2">Analisador SoD</span>
+                    </a>
+                    <a href="{{ url_for('comparador_perfis') }}" title="Comparador de Perfis"
+                       class="px-3 sm:px-5 py-2 text-sm font-medium rounded-md transition-all {{ 'bg-white text-gray-900 shadow-sm' if active_app == 'comparador_perfis' else 'text-gray-500 hover:text-gray-700' }}">
+                        <i class="fas fa-code-branch {{ 'text-gray-800' if active_app == 'comparador_perfis' else 'text-gray-400' }}"></i>
+                        <span class="hidden sm:inline ml-2">Comparador</span>
+                    </a>
+                </nav>
+                <div class="relative" id="user-menu-wrapper">
+                    <button onclick="toggleUserMenu()"
+                            class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition text-sm font-medium text-gray-700">
+                        <div class="h-7 w-7 bg-slate-800 text-white rounded-full flex items-center justify-center text-xs font-bold shrink-0">
+                            {{ (current_user[0] | upper) if current_user else 'U' }}
+                        </div>
+                        <span class="hidden sm:inline">{{ current_user or 'Usuário' }}</span>
+                        <i class="fas fa-chevron-down text-[10px] text-gray-400"></i>
+                    </button>
+                    <div id="user-menu" class="hidden absolute right-0 mt-1 w-52 bg-white rounded-xl shadow-lg border border-gray-200 py-1 z-50">
+                        <a href="{{ url_for('perfil') }}"
+                           class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition">
+                            <i class="fas fa-user-circle text-gray-400 w-4 text-center"></i>
+                            Meu Perfil
+                        </a>
+                        {% if current_role == 'admin' %}
+                        <a href="{{ url_for('admin_usuarios') }}"
+                           class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition">
+                            <i class="fas fa-users-cog text-gray-400 w-4 text-center"></i>
+                            Gerenciar Usuários
+                        </a>
+                        {% endif %}
+                        <div class="border-t border-gray-100 my-1"></div>
+                        <a href="{{ url_for('logout') }}"
+                           class="flex items-center gap-3 px-4 py-2.5 text-sm text-rose-600 hover:bg-rose-50 transition">
+                            <i class="fas fa-sign-out-alt text-rose-400 w-4 text-center"></i>
+                            Sair
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main id="main-content">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+    <footer class="text-center py-8 text-xs text-gray-400 font-medium">
+        <p>&copy; 2025 Barril Dobrado</p>
+    </footer>
+
+    <script>
+        function toggleUserMenu() {
+            document.getElementById('user-menu').classList.toggle('hidden');
+        }
+        document.addEventListener('click', function(e) {
+            const wrapper = document.getElementById('user-menu-wrapper');
+            if (wrapper && !wrapper.contains(e.target)) {
+                document.getElementById('user-menu').classList.add('hidden');
+            }
+        });
+
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            if (!container) return;
+
+            const typeMap = {
+                'danger': 'error',
+                'warning': 'info',
+                'success': 'success',
+                'error': 'error',
+                'info': 'info'
+            };
+
+            const finalType = typeMap[type] || 'info';
+
+            const config = {
+                success: { icon: 'fa-check-circle', bg: 'bg-white', border: 'border-l-4 border-emerald-500', text: 'text-gray-800', iconColor: 'text-emerald-500' },
+                error:   { icon: 'fa-times-circle', bg: 'bg-white', border: 'border-l-4 border-rose-500',    text: 'text-gray-800', iconColor: 'text-rose-500' },
+                info:    { icon: 'fa-info-circle',  bg: 'bg-white', border: 'border-l-4 border-slate-500',   text: 'text-gray-800', iconColor: 'text-slate-500' }
+            };
+
+            const style = config[finalType];
+
+            const toast = document.createElement('div');
+            toast.className = `pointer-events-auto flex items-center gap-4 p-4 min-w-[320px] rounded-lg shadow-xl ring-1 ring-black/5 ${style.bg} ${style.border} ${style.text} toast-enter backdrop-blur-sm`;
+            toast.innerHTML = `
+                <i class="fas ${style.icon} ${style.iconColor} text-xl"></i>
+                <div class="flex-1 text-sm font-medium leading-snug">${message}</div>
+            `;
+
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.classList.remove('toast-enter');
+                toast.classList.add('toast-exit');
+                toast.addEventListener('animationend', () => toast.remove());
+            }, 3500);
+        }
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

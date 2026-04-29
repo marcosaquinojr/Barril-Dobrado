@@ -1,0 +1,18 @@
+# Banco local (não vai mais ser usado, mas por segurança)
+sistema.db
+*.db
+
+# Arquivos temporários de processamento
+uploads/
+outputs/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+venv/
+.venv/
+
+# macOS
+.DS_Store

@@ -1,0 +1,82 @@
+{% extends "layout.html" %}
+
+{% block title %}Meu Perfil — Barril Dobrado{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-8">
+
+    <div>
+        <h2 class="text-2xl font-bold text-slate-900 tracking-tight">Meu Perfil</h2>
+        <p class="text-sm text-gray-400 mt-1">Informações da sessão e histórico de atividades</p>
+    </div>
+
+    <!-- Card do usuário -->
+    <div class="rounded-xl border border-gray-200 bg-white shadow-sm p-6 flex items-center gap-5">
+        <div class="h-16 w-16 bg-slate-800 text-white rounded-2xl flex items-center justify-center text-2xl font-bold shrink-0">
+            {{ (current_user[0] | upper) if current_user else 'U' }}
+        </div>
+        <div class="flex-1 min-w-0">
+            <p class="text-lg font-bold text-slate-900">{{ current_user or 'Usuário' }}</p>
+            <p class="text-xs text-gray-400 font-bold uppercase tracking-widest mt-0.5">Auditor · Barril Dobrado</p>
+            {% if session_login_time %}
+            <p class="text-xs text-gray-400 mt-2">
+                <i class="fas fa-clock mr-1"></i>
+                Sessão iniciada em {{ session_login_time }}
+            </p>
+            {% endif %}
+        </div>
+        <a href="{{ url_for('logout') }}"
+           class="shrink-0 flex items-center gap-2 px-4 py-2 text-sm text-rose-600 border border-rose-200 rounded-lg hover:bg-rose-50 transition font-medium">
+            <i class="fas fa-sign-out-alt"></i>
+            <span class="hidden sm:inline">Sair</span>
+        </a>
+    </div>
+
+    <!-- Histórico de atividades -->
+    <div>
+        <p class="block text-xs font-bold uppercase tracking-widest text-slate-500 mb-3">Atividades Recentes</p>
+
+        {% if atividades %}
+        <div class="rounded-xl border border-gray-200 bg-white shadow-sm divide-y divide-gray-100">
+            {% for a in atividades %}
+            {% set tipo = a['tipo'] %}
+            {% if tipo == 'validacao_var' %}
+                {% set icon = 'fa-check-double' %}
+                {% set icon_bg = 'bg-slate-100 text-slate-600' %}
+                {% set label = 'Validador VAR' %}
+            {% elif tipo == 'analise_sod' %}
+                {% set icon = 'fa-shield-alt' %}
+                {% set icon_bg = 'bg-amber-50 text-amber-600' %}
+                {% set label = 'Analisador SoD' %}
+            {% elif tipo == 'comparacao_perfis' %}
+                {% set icon = 'fa-code-branch' %}
+                {% set icon_bg = 'bg-blue-50 text-blue-600' %}
+                {% set label = 'Comparador de Perfis' %}
+            {% else %}
+                {% set icon = 'fa-bolt' %}
+                {% set icon_bg = 'bg-gray-100 text-gray-500' %}
+                {% set label = tipo %}
+            {% endif %}
+            <div class="flex items-start gap-4 px-5 py-4">
+                <div class="h-8 w-8 {{ icon_bg }} rounded-lg flex items-center justify-center shrink-0 mt-0.5">
+                    <i class="fas {{ icon }} text-xs"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <p class="text-xs font-bold uppercase tracking-widest text-gray-400">{{ label }}</p>
+                    <p class="text-sm text-slate-700 mt-0.5 leading-snug">{{ a['descricao'] }}</p>
+                </div>
+                <span class="text-xs text-gray-400 shrink-0 mt-0.5 whitespace-nowrap">{{ a['timestamp'] }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-10 text-center">
+            <i class="fas fa-history text-gray-300 text-3xl mb-3"></i>
+            <p class="text-sm font-medium text-gray-400">Nenhuma atividade registrada ainda.</p>
+            <p class="text-xs text-gray-300 mt-1">As análises feitas aqui aparecerão nesta lista.</p>
+        </div>
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}

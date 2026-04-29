@@ -1,0 +1,109 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="fade-in max-w-5xl mx-auto space-y-12">
+
+    <div class="text-center py-10">
+        <h1 class="text-4xl font-extrabold text-slate-900 tracking-tight mb-3">O que você precisa fazer hoje?</h1>
+        <p class="text-lg text-slate-500 max-w-2xl mx-auto font-light">
+            Ferramentas para quem trabalha com perfis TOTVS no dia a dia. Sem enrolação.
+        </p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+        <a href="{{ url_for('validator') }}" class="group relative bg-white rounded-2xl shadow-sm border border-gray-200 p-8 hover:shadow-lg hover:border-slate-300 transition-all duration-300 transform hover:-translate-y-1 overflow-hidden">
+            <div class="absolute -top-6 -right-6 opacity-5 group-hover:opacity-10 transition-opacity">
+                <i class="fas fa-check-double fa-8x text-slate-800"></i>
+            </div>
+
+            <div class="flex items-center gap-4 mb-6 relative z-10">
+                <div class="h-14 w-14 bg-gray-50 text-slate-700 rounded-xl flex items-center justify-center border border-gray-100 group-hover:bg-slate-800 group-hover:text-white transition-colors duration-300">
+                    <i class="fas fa-check-double fa-xl"></i>
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold text-slate-800 group-hover:text-slate-900 transition-colors">Validador VAR</h2>
+                    <span class="text-[10px] font-bold uppercase tracking-widest text-gray-400">Validador VAR</span>
+                </div>
+            </div>
+
+            <p class="text-gray-500 mb-6 leading-relaxed relative z-10 text-sm">
+                Sobe o perfil, bate contra a base VAR e já te diz o que tá certo, o que diverge e o que dá pra aproveitar com sugestão.
+            </p>
+
+            <div class="flex items-center text-xs font-bold uppercase tracking-wide text-slate-600 group-hover:text-slate-900 transition-colors relative z-10">
+                Abrir <i class="fas fa-arrow-right ml-2 group-hover:translate-x-1 transition-transform"></i>
+            </div>
+        </a>
+
+        <a href="{{ url_for('sod_analyzer') }}" class="group relative bg-white rounded-2xl shadow-sm border border-gray-200 p-8 hover:shadow-lg hover:border-slate-300 transition-all duration-300 transform hover:-translate-y-1 overflow-hidden">
+            <div class="absolute -top-6 -right-6 opacity-5 group-hover:opacity-10 transition-opacity">
+                <i class="fas fa-shield-alt fa-8x text-slate-800"></i>
+            </div>
+
+            <div class="flex items-center gap-4 mb-6 relative z-10">
+                <div class="h-14 w-14 bg-gray-50 text-slate-700 rounded-xl flex items-center justify-center border border-gray-100 group-hover:bg-slate-800 group-hover:text-white transition-colors duration-300">
+                    <i class="fas fa-shield-alt fa-xl"></i>
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold text-slate-800 group-hover:text-slate-900 transition-colors">Analisador SoD</h2>
+                    <span class="text-[10px] font-bold uppercase tracking-widest text-gray-400">Analisador SoD</span>
+                </div>
+            </div>
+
+            <p class="text-gray-500 mb-6 leading-relaxed relative z-10 text-sm">
+                Joga o relatório TOTVS aqui e descobre se o perfil tem conflito de SoD — criação ou manutenção, você escolhe.
+            </p>
+
+            <div class="flex items-center text-xs font-bold uppercase tracking-wide text-slate-600 group-hover:text-slate-900 transition-colors relative z-10">
+                Abrir <i class="fas fa-arrow-right ml-2 group-hover:translate-x-1 transition-transform"></i>
+            </div>
+        </a>
+
+        <a href="{{ url_for('comparador_perfis') }}" class="group relative bg-white rounded-2xl shadow-sm border border-gray-200 p-8 hover:shadow-lg hover:border-slate-300 transition-all duration-300 transform hover:-translate-y-1 overflow-hidden">
+            <div class="absolute -top-6 -right-6 opacity-5 group-hover:opacity-10 transition-opacity">
+                <i class="fas fa-code-branch fa-8x text-slate-800"></i>
+            </div>
+
+            <div class="flex items-center gap-4 mb-6 relative z-10">
+                <div class="h-14 w-14 bg-gray-50 text-slate-700 rounded-xl flex items-center justify-center border border-gray-100 group-hover:bg-slate-800 group-hover:text-white transition-colors duration-300">
+                    <i class="fas fa-code-branch fa-xl"></i>
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold text-slate-800 group-hover:text-slate-900 transition-colors">Comparador de Perfis</h2>
+                    <span class="text-[10px] font-bold uppercase tracking-widest text-gray-400">Comparador de Perfis</span>
+                </div>
+            </div>
+
+            <p class="text-gray-500 mb-6 leading-relaxed relative z-10 text-sm">
+                Dois PDFs de perfil TOTVS: um espelho e um solicitado. O sistema te diz o que falta, o que sobra e o que já está igual.
+            </p>
+
+            <div class="flex items-center text-xs font-bold uppercase tracking-wide text-slate-600 group-hover:text-slate-900 transition-colors relative z-10">
+                Abrir <i class="fas fa-arrow-right ml-2 group-hover:translate-x-1 transition-transform"></i>
+            </div>
+        </a>
+
+    </div>
+
+    <div class="pt-12 grid grid-cols-3 gap-4 text-center opacity-40 grayscale">
+        <div>
+            <i class="fas fa-server mb-2 text-gray-400"></i>
+            <div class="text-[10px] font-bold uppercase tracking-widest text-gray-500">Feito pra TOTVS</div>
+        </div>
+        <div>
+            <i class="fas fa-lock mb-2 text-gray-400"></i>
+            <div class="text-[10px] font-bold uppercase tracking-widest text-gray-500">Uso interno</div>
+        </div>
+        <div>
+            <i class="fas fa-bolt mb-2 text-gray-400"></i>
+            <div class="text-[10px] font-bold uppercase tracking-widest text-gray-500">Rápido e direto</div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .fade-in { animation: fadeIn 0.6s ease-out forwards; opacity: 0; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+{% endblock %}

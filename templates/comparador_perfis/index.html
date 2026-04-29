@@ -1,0 +1,430 @@
+{% extends "layout.html" %}
+{% block title %}Comparador de Perfis — Barril Dobrado{% endblock %}
+
+{% block content %}
+<div class="fade-in max-w-5xl mx-auto space-y-8">
+
+    <!-- Cabeçalho -->
+    <div>
+        <h2 class="text-2xl font-bold text-slate-900 tracking-tight">Comparador de Perfis</h2>
+        <p class="text-sm text-slate-500 mt-1">
+            Faça upload de dois PDFs de <strong>Funcionalidades do Perfil</strong> (TOTVS) e veja exatamente o que falta, o que é comum e o que sobra.
+        </p>
+    </div>
+
+    <!-- Upload Zone -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+        <!-- Espelho -->
+        <div>
+            <label class="block text-xs font-bold uppercase tracking-widest text-slate-500 mb-2">
+                <i class="fas fa-star mr-1 text-amber-500"></i> Perfil Espelho (Referência)
+            </label>
+            <div id="drop-espelho"
+                 class="drop-zone relative border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-slate-400 hover:bg-gray-50 transition-all"
+                 onclick="document.getElementById('pdf_espelho').click()">
+                <i class="fas fa-file-pdf text-3xl text-gray-300 mb-3 block"></i>
+                <p class="text-sm font-medium text-gray-500">Clique ou arraste o PDF espelho</p>
+                <p class="text-xs text-gray-400 mt-1">Somente .pdf</p>
+                <p id="nome-espelho" class="mt-3 text-sm font-semibold text-slate-700 hidden"></p>
+                <input type="file" id="pdf_espelho" accept=".pdf" class="hidden">
+            </div>
+        </div>
+
+        <!-- Solicitado -->
+        <div>
+            <label class="block text-xs font-bold uppercase tracking-widest text-slate-500 mb-2">
+                <i class="fas fa-user mr-1 text-blue-500"></i> Perfil Solicitado
+            </label>
+            <div id="drop-solicitado"
+                 class="drop-zone relative border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-slate-400 hover:bg-gray-50 transition-all"
+                 onclick="document.getElementById('pdf_solicitado').click()">
+                <i class="fas fa-file-pdf text-3xl text-gray-300 mb-3 block"></i>
+                <p class="text-sm font-medium text-gray-500">Clique ou arraste o PDF solicitado</p>
+                <p class="text-xs text-gray-400 mt-1">Somente .pdf</p>
+                <p id="nome-solicitado" class="mt-3 text-sm font-semibold text-slate-700 hidden"></p>
+                <input type="file" id="pdf_solicitado" accept=".pdf" class="hidden">
+            </div>
+        </div>
+    </div>
+
+    <!-- Botão -->
+    <div class="flex flex-col items-center gap-2">
+        <button id="btn-comparar"
+                onclick="executarComparacao()"
+                disabled
+                class="px-10 py-3 bg-slate-800 text-white text-sm font-semibold rounded-xl hover:bg-slate-700 active:scale-95 transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed">
+            <i class="fas fa-code-branch mr-2"></i> Comparar Perfis
+        </button>
+        <p id="hint-arquivos" class="text-xs text-gray-400">Selecione os dois PDFs para habilitar a comparação</p>
+    </div>
+
+    <!-- Loading -->
+    <div id="loading" class="hidden text-center py-12">
+        <div class="inline-flex flex-col items-center gap-3">
+            <div class="w-10 h-10 border-4 border-slate-200 border-t-slate-700 rounded-full animate-spin"></div>
+            <p class="text-sm text-slate-500 font-medium">Processando PDFs, aguarde...</p>
+        </div>
+    </div>
+
+    <!-- Alerta de módulos diferentes (bloqueante) -->
+    <div id="alerta-modulo" class="hidden rounded-xl border border-rose-200 bg-rose-50 p-5">
+        <div class="flex gap-3">
+            <i class="fas fa-ban text-rose-500 text-lg mt-0.5"></i>
+            <div>
+                <p class="font-semibold text-rose-800 text-sm">Módulos incompatíveis — comparação bloqueada</p>
+                <p class="text-sm text-rose-700 mt-1">Os PDFs enviados pertencem a módulos diferentes. Para comparar, ambos devem ser do mesmo módulo TOTVS.</p>
+                <div id="alerta-modulo-detalhe" class="mt-3 grid grid-cols-2 gap-3"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Aviso de ambientes diferentes (não bloqueante) -->
+    <div id="aviso-ambiente" class="hidden rounded-xl border border-amber-200 bg-amber-50 p-4">
+        <div class="flex gap-3 items-start">
+            <i class="fas fa-triangle-exclamation text-amber-500 text-lg mt-0.5"></i>
+            <div>
+                <p class="font-semibold text-amber-800 text-sm">Atenção: ambientes diferentes</p>
+                <p id="aviso-ambiente-texto" class="text-sm text-amber-700 mt-0.5"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Resultado -->
+    <div id="resultado" class="hidden space-y-6">
+
+        <!-- Cards de resumo -->
+        <div id="resumo-cards" class="grid grid-cols-2 md:grid-cols-4 gap-4 items-start"></div>
+
+        <!-- Info dos perfis -->
+        <div id="info-perfis" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+
+        <!-- Abas -->
+        <div>
+            <div class="flex gap-1 border-b border-gray-200 mb-4" id="tabs">
+                <button onclick="trocarAba('faltantes')" id="tab-faltantes"
+                    class="tab-btn px-5 py-2.5 text-sm font-semibold border-b-2 border-slate-800 text-slate-800 -mb-px transition-all">
+                    <i class="fas fa-exclamation-circle mr-1 text-rose-500"></i>
+                    Faltantes <span id="cnt-faltantes" class="ml-1 bg-rose-100 text-rose-700 text-xs font-bold px-2 py-0.5 rounded-full"></span>
+                </button>
+                <button onclick="trocarAba('comuns')" id="tab-comuns"
+                    class="tab-btn px-5 py-2.5 text-sm font-semibold border-b-2 border-transparent text-gray-400 -mb-px hover:text-gray-700 transition-all">
+                    <i class="fas fa-check-circle mr-1 text-emerald-500"></i>
+                    Em Comum <span id="cnt-comuns" class="ml-1 bg-emerald-100 text-emerald-700 text-xs font-bold px-2 py-0.5 rounded-full"></span>
+                </button>
+                <button onclick="trocarAba('extras')" id="tab-extras"
+                    class="tab-btn px-5 py-2.5 text-sm font-semibold border-b-2 border-transparent text-gray-400 -mb-px hover:text-gray-700 transition-all">
+                    <i class="fas fa-plus-circle mr-1 text-blue-500"></i>
+                    Extras <span id="cnt-extras" class="ml-1 bg-blue-100 text-blue-700 text-xs font-bold px-2 py-0.5 rounded-full"></span>
+                </button>
+            </div>
+
+            <!-- Barra de busca + export -->
+            <div class="flex items-center justify-between mb-3 gap-3">
+                <div class="relative flex-1 max-w-sm">
+                    <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+                    <input type="text" id="busca" placeholder="Buscar funcionalidade..."
+                           oninput="filtrarTabela()"
+                           class="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-300">
+                </div>
+                <div class="flex gap-2">
+                    <button id="btn-exportar-faltantes" onclick="exportarFaltantes()"
+                            class="px-3 py-2 text-sm font-semibold bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition-all shadow-sm">
+                        <i class="fas fa-file-excel mr-1.5"></i>Exportar Faltantes
+                    </button>
+                    <button id="btn-exportar" onclick="exportar()"
+                            class="px-3 py-2 text-sm font-semibold bg-white border border-gray-200 text-slate-700 rounded-lg hover:bg-gray-50 hover:border-slate-300 transition-all shadow-sm">
+                        <i class="fas fa-file-excel mr-1.5 text-emerald-600"></i>Completo
+                    </button>
+                </div>
+            </div>
+
+            <!-- Tabela -->
+            <div class="overflow-hidden rounded-xl border border-gray-200 shadow-sm">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="bg-slate-800 text-white">
+                            <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider w-32">Código</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Funcionalidade</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider w-36">Codperfil</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabela-corpo" class="divide-y divide-gray-100"></tbody>
+                </table>
+                <div id="tabela-vazia" class="hidden text-center py-10 text-sm text-gray-400">
+                    <i class="fas fa-inbox text-2xl mb-2 block"></i>
+                    Nenhuma funcionalidade encontrada.
+                </div>
+            </div>
+            <p id="contador-linhas" class="text-xs text-gray-400 mt-2 text-right"></p>
+        </div>
+
+    </div>
+</div>
+
+<style>
+    .fade-in { animation: fadeIn 0.5s ease-out forwards; opacity: 0; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .drop-zone.dragover { border-color: #334155; background-color: #f8fafc; }
+    .tab-btn.active { border-color: #1e293b; color: #1e293b; }
+    .tab-btn:not(.active) { border-color: transparent; color: #9ca3af; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let dadosGlobais = null;
+    let abaAtual = 'faltantes';
+    let resultId = null;
+
+    // --- Drag & Drop ---
+    ['espelho', 'solicitado'].forEach(tipo => {
+        const zone = document.getElementById(`drop-${tipo}`);
+        zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+        zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+        zone.addEventListener('drop', e => {
+            e.preventDefault();
+            zone.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file && file.name.toLowerCase().endsWith('.pdf')) {
+                const input = document.getElementById(`pdf_${tipo}`);
+                const dt = new DataTransfer();
+                dt.items.add(file);
+                input.files = dt.files;
+                mostrarNomeArquivo(tipo, file.name);
+                verificarBotao();
+            } else {
+                showToast('Apenas arquivos PDF são aceitos.', 'error');
+            }
+        });
+    });
+
+    document.getElementById('pdf_espelho').addEventListener('change', e => {
+        if (e.target.files[0]) { mostrarNomeArquivo('espelho', e.target.files[0].name); verificarBotao(); }
+    });
+    document.getElementById('pdf_solicitado').addEventListener('change', e => {
+        if (e.target.files[0]) { mostrarNomeArquivo('solicitado', e.target.files[0].name); verificarBotao(); }
+    });
+
+    function verificarBotao() {
+        const temE = !!document.getElementById('pdf_espelho').files[0];
+        const temS = !!document.getElementById('pdf_solicitado').files[0];
+        const btn = document.getElementById('btn-comparar');
+        const hint = document.getElementById('hint-arquivos');
+        btn.disabled = !(temE && temS);
+        if (temE && temS) {
+            hint.textContent = 'Pronto para comparar!';
+            hint.className = 'text-xs text-emerald-600 font-medium';
+        } else {
+            hint.textContent = `Selecione ${!temE ? 'o PDF espelho' : 'o PDF solicitado'} para continuar`;
+            hint.className = 'text-xs text-gray-400';
+        }
+    }
+
+    function mostrarNomeArquivo(tipo, nome) {
+        const el = document.getElementById(`nome-${tipo}`);
+        el.textContent = '📄 ' + nome;
+        el.classList.remove('hidden');
+        const zone = document.getElementById(`drop-${tipo}`);
+        zone.classList.remove('border-gray-300');
+        zone.classList.add('border-slate-400', 'bg-gray-50');
+    }
+
+    // --- Comparar ---
+    async function executarComparacao() {
+        const pdfE = document.getElementById('pdf_espelho').files[0];
+        const pdfS = document.getElementById('pdf_solicitado').files[0];
+
+        if (!pdfE || !pdfS) {
+            showToast('Selecione os dois PDFs antes de comparar.', 'error');
+            return;
+        }
+
+        const btn = document.getElementById('btn-comparar');
+        btn.disabled = true;
+        document.getElementById('loading').classList.remove('hidden');
+        document.getElementById('resultado').classList.add('hidden');
+
+        const formData = new FormData();
+        formData.append('pdf_espelho', pdfE);
+        formData.append('pdf_solicitado', pdfS);
+
+        // Limpa alertas anteriores
+        document.getElementById('alerta-modulo').classList.add('hidden');
+        document.getElementById('aviso-ambiente').classList.add('hidden');
+        document.getElementById('resultado').classList.add('hidden');
+
+        try {
+            const resp = await fetch('/comparar_perfis', { method: 'POST', body: formData });
+            const data = await resp.json();
+
+            // Módulos diferentes — bloqueia
+            if (data.erro_modulo) {
+                const detalhe = document.getElementById('alerta-modulo-detalhe');
+                detalhe.innerHTML = `
+                    <div class="bg-white rounded-lg border border-rose-200 px-3 py-2">
+                        <p class="text-xs font-bold uppercase tracking-wider text-rose-400 mb-0.5">Espelho</p>
+                        <p class="text-sm font-semibold text-rose-800">${data.modulo_espelho || 'Não identificado'}</p>
+                    </div>
+                    <div class="bg-white rounded-lg border border-rose-200 px-3 py-2">
+                        <p class="text-xs font-bold uppercase tracking-wider text-rose-400 mb-0.5">Solicitado</p>
+                        <p class="text-sm font-semibold text-rose-800">${data.modulo_solicitado || 'Não identificado'}</p>
+                    </div>`;
+                document.getElementById('alerta-modulo').classList.remove('hidden');
+                showToast('Comparação bloqueada: módulos diferentes.', 'error');
+                return;
+            }
+
+            if (!resp.ok || data.erro) {
+                showToast(data.erro || 'Erro ao processar.', 'error');
+                return;
+            }
+
+            // Ambientes diferentes — avisa mas continua
+            if (data.aviso_ambiente) {
+                document.getElementById('aviso-ambiente-texto').textContent = data.aviso_ambiente;
+                document.getElementById('aviso-ambiente').classList.remove('hidden');
+            }
+
+            dadosGlobais = data;
+            resultId = data.result_id;
+            renderizarResultado(data);
+            showToast('Comparação concluída!', 'success');
+
+        } catch (err) {
+            showToast('Falha na comunicação com o servidor.', 'error');
+        } finally {
+            btn.disabled = false;
+            document.getElementById('loading').classList.add('hidden');
+        }
+    }
+
+    function renderizarResultado(data) {
+        const { info_espelho: ie, info_solicitado: is_, faltantes, extras, comuns,
+                total_espelho, total_solicitado } = data;
+
+        // Resumo cards — faltantes em destaque
+        document.getElementById('resumo-cards').innerHTML = `
+            ${card('Faltantes', faltantes.length, 'fa-exclamation-circle', 'rose', true)}
+            ${card('Em Comum', comuns.length, 'fa-check-circle', 'emerald')}
+            ${card('Total Espelho', total_espelho, 'fa-star', 'amber')}
+            ${card('Total Solicitado', total_solicitado, 'fa-user', 'blue')}
+        `;
+
+        // Info perfis
+        document.getElementById('info-perfis').innerHTML = `
+            ${infoCard(ie, 'Espelho', 'amber')}
+            ${infoCard(is_, 'Solicitado', 'blue')}
+        `;
+
+        // Contadores nas abas
+        document.getElementById('cnt-faltantes').textContent = faltantes.length;
+        document.getElementById('cnt-comuns').textContent = comuns.length;
+        document.getElementById('cnt-extras').textContent = extras.length;
+
+        document.getElementById('resultado').classList.remove('hidden');
+        trocarAba('faltantes');
+    }
+
+    function card(label, valor, icon, cor, destaque = false) {
+        const cores = {
+            amber:   'bg-amber-50 text-amber-700 border-amber-200',
+            blue:    'bg-blue-50 text-blue-700 border-blue-200',
+            rose:    destaque ? 'bg-rose-600 text-white border-rose-600 shadow-md' : 'bg-rose-50 text-rose-700 border-rose-200',
+            emerald: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+        };
+        const tamanhoNumero = destaque ? 'text-4xl' : 'text-3xl';
+        return `
+            <div class="rounded-xl border p-4 ${cores[cor]}">
+                <div class="flex items-center gap-2 mb-1">
+                    <i class="fas ${icon} text-xs"></i>
+                    <span class="text-xs font-bold uppercase tracking-wider">${label}</span>
+                </div>
+                <p class="${tamanhoNumero} font-extrabold">${valor}</p>
+                ${destaque && valor > 0 ? `<p class="text-xs mt-1 opacity-80">Precisa ser solicitado</p>` : ''}
+            </div>`;
+    }
+
+    function infoCard(info, label, cor) {
+        const cores = { amber: 'border-amber-200 bg-amber-50', blue: 'border-blue-200 bg-blue-50' };
+        const rows = [
+            ['Codperfil', info.codperfil],
+            ['Módulo', info.modulo],
+            ['Emitido por', info.emitido_por],
+            ['Data/Hora', info.data_hora],
+            ['Ambiente', info.ambiente],
+        ].filter(([, v]) => v).map(([k, v]) => `
+            <div class="flex gap-2 text-xs">
+                <span class="text-gray-500 font-medium w-24 shrink-0">${k}</span>
+                <span class="font-semibold text-slate-700 truncate">${v}</span>
+            </div>`).join('');
+        return `
+            <div class="rounded-xl border p-4 ${cores[cor]}">
+                <p class="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">Perfil ${label}</p>
+                <div class="space-y-1.5">${rows || '<span class="text-xs text-gray-400">Sem metadados extraídos</span>'}</div>
+            </div>`;
+    }
+
+    // --- Abas ---
+    function trocarAba(aba) {
+        abaAtual = aba;
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById(`tab-${aba}`).classList.add('active');
+        document.getElementById('busca').value = '';
+        renderizarTabela(dadosGlobais[aba]);
+    }
+
+    function renderizarTabela(lista) {
+        const corpo = document.getElementById('tabela-corpo');
+        const vazio = document.getElementById('tabela-vazia');
+        const contador = document.getElementById('contador-linhas');
+
+        if (!lista || lista.length === 0) {
+            corpo.innerHTML = '';
+            vazio.classList.remove('hidden');
+            contador.textContent = '';
+            return;
+        }
+
+        vazio.classList.add('hidden');
+        corpo.innerHTML = lista.map((r, i) => {
+            const bg = i % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+            const rowClass = abaAtual === 'faltantes'
+                ? 'hover:bg-rose-50'
+                : abaAtual === 'extras'
+                    ? 'hover:bg-blue-50'
+                    : 'hover:bg-emerald-50';
+            return `<tr class="${bg} ${rowClass} transition-colors">
+                <td class="px-4 py-2.5 font-mono text-xs text-slate-600 font-medium">${r.codigo}</td>
+                <td class="px-4 py-2.5 text-slate-700">${r.funcionalidade}</td>
+                <td class="px-4 py-2.5 text-xs font-mono text-slate-500">${r.codperfil}</td>
+            </tr>`;
+        }).join('');
+
+        contador.textContent = `${lista.length} funcionalidade${lista.length !== 1 ? 's' : ''}`;
+    }
+
+    function filtrarTabela() {
+        const termo = document.getElementById('busca').value.toLowerCase().trim();
+        const listaOriginal = dadosGlobais[abaAtual] || [];
+        const filtrada = termo
+            ? listaOriginal.filter(r =>
+                r.funcionalidade.toLowerCase().includes(termo) ||
+                r.codigo.toLowerCase().includes(termo) ||
+                (r.codperfil || '').toLowerCase().includes(termo))
+            : listaOriginal;
+        renderizarTabela(filtrada);
+    }
+
+    // --- Exportar ---
+    function exportar() {
+        if (!resultId) { showToast('Execute a comparação antes de exportar.', 'error'); return; }
+        window.location.href = `/exportar_comparacao/${resultId}`;
+    }
+
+    function exportarFaltantes() {
+        if (!resultId) { showToast('Execute a comparação antes de exportar.', 'error'); return; }
+        window.location.href = `/exportar_comparacao/${resultId}?aba=faltantes`;
+    }
+</script>
+{% endblock %}

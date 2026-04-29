@@ -1,0 +1,472 @@
+{% extends "layout.html" %}
+{% block title %}Analisador SoD — Barril Dobrado{% endblock %}
+
+{% block content %}
+<div class="fade-in max-w-5xl mx-auto space-y-8">
+
+    <!-- Cabeçalho -->
+    <div class="flex items-center justify-between border-b border-gray-100 pb-6">
+        <div>
+            <h2 class="text-2xl font-bold text-slate-900 tracking-tight">Analisador SoD</h2>
+            <p class="text-sm text-slate-500 mt-1">Detecte conflitos de Segregação de Funções na matriz de riscos TOTVS.</p>
+        </div>
+        <span class="px-3 py-1.5 bg-gray-100 text-gray-500 text-xs font-bold uppercase tracking-wider rounded-lg border border-gray-200">
+            v4.0
+        </span>
+    </div>
+
+    <!-- Seção 1: Cenário -->
+    <div>
+        <label class="block text-xs font-bold uppercase tracking-widest text-slate-500 mb-3">
+            1. Cenário de Análise
+        </label>
+        <div class="flex gap-4">
+            <label class="cursor-pointer relative flex-1">
+                <input type="radio" name="analysis_type" id="radio-manutencao" value="manutencao" class="peer sr-only" checked>
+                <div class="py-3 px-4 rounded-xl border border-gray-200 bg-gray-50 text-gray-500 text-center text-sm font-medium hover:bg-white hover:border-gray-300 transition-all peer-checked:border-slate-600 peer-checked:bg-white peer-checked:text-slate-800 peer-checked:shadow-sm flex items-center justify-center gap-2">
+                    <i class="fas fa-user-edit"></i> Manutenção
+                </div>
+            </label>
+            <label class="cursor-pointer relative flex-1">
+                <input type="radio" name="analysis_type" id="radio-criacao" value="criacao" class="peer sr-only">
+                <div class="py-3 px-4 rounded-xl border border-gray-200 bg-gray-50 text-gray-500 text-center text-sm font-medium hover:bg-white hover:border-gray-300 transition-all peer-checked:border-slate-600 peer-checked:bg-white peer-checked:text-slate-800 peer-checked:shadow-sm flex items-center justify-center gap-2">
+                    <i class="fas fa-plus-circle"></i> Criação
+                </div>
+            </label>
+        </div>
+    </div>
+
+    <!-- Seção 2: Upload -->
+    <div>
+        <label class="block text-xs font-bold uppercase tracking-widest text-slate-500 mb-3">
+            2. Matriz de Risco
+        </label>
+        <div id="drop-zone"
+             class="relative border-2 border-dashed border-gray-300 rounded-xl p-10 text-center cursor-pointer hover:border-slate-400 hover:bg-gray-50 transition-all"
+             onclick="document.getElementById('fileInput').click()">
+            <input type="file" id="fileInput" accept=".xlsx,.xls,.pdf" class="hidden">
+            <div id="drop-idle">
+                <i class="fas fa-file-alt text-3xl text-gray-300 mb-3 block"></i>
+                <p class="text-sm font-medium text-gray-500">Clique ou arraste o arquivo</p>
+                <p class="text-xs text-gray-400 mt-1">.xlsx, .xls ou .pdf</p>
+            </div>
+            <div id="drop-selected" class="hidden">
+                <i class="fas fa-check-circle text-3xl text-emerald-400 mb-3 block"></i>
+                <p id="filename-display" class="text-sm font-semibold text-slate-700"></p>
+                <button type="button" id="btn-remove-file"
+                        class="text-xs text-rose-500 hover:text-rose-700 mt-2 font-medium"
+                        onclick="removerArquivo(event)">
+                    Remover arquivo
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Nº do Chamado (opcional) -->
+    <div>
+        <label class="block text-xs font-bold uppercase tracking-widest text-slate-500 mb-3">
+            3. Nº do Chamado <span class="text-gray-400 normal-case font-normal tracking-normal">(opcional — usado no e-mail)</span>
+        </label>
+        <input type="text" id="input-ticket" placeholder="Ex: 0001234"
+               class="w-full sm:w-64 px-4 py-2.5 text-sm border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-slate-400 outline-none transition">
+    </div>
+
+    <!-- Botão -->
+    <div class="flex flex-col items-center gap-2">
+        <button id="btn-submit" disabled onclick="executarAnalise()"
+                class="px-10 py-3 bg-slate-800 text-white text-sm font-semibold rounded-xl hover:bg-slate-700 active:scale-95 transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed">
+            <i class="fas fa-shield-alt mr-2"></i> Analisar SoD
+        </button>
+        <p id="hint-arquivo" class="text-xs text-gray-400">Selecione o arquivo para habilitar a análise</p>
+    </div>
+
+    <!-- Loading -->
+    <div id="loading" class="hidden text-center py-12">
+        <div class="inline-flex flex-col items-center gap-3">
+            <div class="w-10 h-10 border-4 border-slate-200 border-t-slate-700 rounded-full animate-spin"></div>
+            <p class="text-sm text-slate-500 font-medium">Analisando matriz de riscos...</p>
+        </div>
+    </div>
+
+    <!-- Área de resultado -->
+    <div id="results-area" class="hidden space-y-6"></div>
+
+</div>
+
+<style>
+    .fade-in { animation: fadeIn 0.5s ease-out forwards; opacity: 0; }
+    .result-in { animation: fadeIn 0.4s ease-out forwards; opacity: 0; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // --- Drop zone ---
+    const dropZone   = document.getElementById('drop-zone');
+    const fileInput  = document.getElementById('fileInput');
+    const dropIdle   = document.getElementById('drop-idle');
+    const dropSelected = document.getElementById('drop-selected');
+    const filenameDisplay = document.getElementById('filename-display');
+    const btnSubmit  = document.getElementById('btn-submit');
+    const hintArquivo = document.getElementById('hint-arquivo');
+
+    ['dragenter','dragover','dragleave','drop'].forEach(ev =>
+        dropZone.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); }));
+
+    ['dragenter','dragover'].forEach(ev =>
+        dropZone.addEventListener(ev, () => dropZone.classList.add('border-slate-400','bg-gray-50')));
+
+    ['dragleave','drop'].forEach(ev =>
+        dropZone.addEventListener(ev, () => dropZone.classList.remove('border-slate-400','bg-gray-50')));
+
+    dropZone.addEventListener('drop', e => {
+        const f = e.dataTransfer.files[0];
+        if (f) { fileInput.files = e.dataTransfer.files; mostrarArquivo(f.name); }
+    });
+    fileInput.addEventListener('change', function() {
+        if (this.files[0]) mostrarArquivo(this.files[0].name);
+    });
+
+    function mostrarArquivo(nome) {
+        dropIdle.classList.add('hidden');
+        dropSelected.classList.remove('hidden');
+        filenameDisplay.textContent = nome;
+        dropZone.classList.add('border-emerald-300','bg-emerald-50/30');
+        dropZone.classList.remove('border-gray-300');
+        btnSubmit.disabled = false;
+        hintArquivo.textContent = 'Pronto para analisar!';
+        hintArquivo.className = 'text-xs text-emerald-600 font-medium';
+    }
+
+    function removerArquivo(e) {
+        e.stopPropagation();
+        fileInput.value = '';
+        dropIdle.classList.remove('hidden');
+        dropSelected.classList.add('hidden');
+        dropZone.classList.remove('border-emerald-300','bg-emerald-50/30');
+        dropZone.classList.add('border-gray-300');
+        btnSubmit.disabled = true;
+        hintArquivo.textContent = 'Selecione o arquivo para habilitar a análise';
+        hintArquivo.className = 'text-xs text-gray-400';
+        document.getElementById('results-area').classList.add('hidden');
+    }
+
+    // --- Análise AJAX ---
+    let DADOS_PARECER = null;
+
+    async function executarAnalise() {
+        const file = fileInput.files[0];
+        if (!file) { showToast('Selecione um arquivo.', 'error'); return; }
+
+        const cenario = document.querySelector('input[name="analysis_type"]:checked').value;
+
+        btnSubmit.disabled = true;
+        btnSubmit.innerHTML = '<i class="fas fa-circle-notch fa-spin mr-2"></i> Analisando...';
+        document.getElementById('loading').classList.remove('hidden');
+        document.getElementById('results-area').classList.add('hidden');
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('analysis_type', cenario);
+
+        try {
+            const resp = await fetch('/analisar_sod', { method: 'POST', body: formData });
+            const data = await resp.json();
+
+            if (data.status === 'error') {
+                showToast(data.message || 'Erro ao processar.', 'error');
+                return;
+            }
+
+            DADOS_PARECER = {
+                status: data.status,
+                perfil: data.perfil,
+                modulo: data.modulo || '',
+                riscos: data.data || {}
+            };
+            renderResultado(data, cenario);
+            document.getElementById('results-area').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            showToast('Análise concluída!', 'success');
+
+        } catch (err) {
+            showToast('Falha na comunicação com o servidor.', 'error');
+        } finally {
+            btnSubmit.disabled = false;
+            btnSubmit.innerHTML = '<i class="fas fa-shield-alt mr-2"></i> Analisar SoD';
+            document.getElementById('loading').classList.add('hidden');
+        }
+    }
+
+    // --- Renderização ---
+    function renderResultado(data, cenario) {
+        const area = document.getElementById('results-area');
+        const { status, perfil, data: riscos, escopo_analisado, matriz_referencia, message } = data;
+        const cenarioLabel = cenario === 'manutencao' ? 'Manutenção' : 'Criação';
+        let html = '';
+
+        // Nota técnica
+        if (status === 'success') {
+            html += `
+            <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4 result-in">
+                <div class="flex items-center gap-3 w-full sm:w-auto">
+                    <div class="w-10 h-10 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-600">
+                        <i class="fas fa-file-alt fa-lg"></i>
+                    </div>
+                    <div>
+                        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Evidência</p>
+                        <p class="text-sm font-bold text-slate-700">Nota Técnica · ${cenarioLabel}</p>
+                    </div>
+                </div>
+                <div class="flex gap-2 w-full sm:w-auto">
+                    <button onclick="copiarParecer('chamado')" class="flex-1 sm:flex-none bg-white hover:bg-gray-50 text-slate-700 text-xs font-bold py-2 px-4 rounded-lg transition border border-gray-200 flex items-center justify-center gap-2 hover:shadow-sm">
+                        <i class="fas fa-ticket-alt text-slate-400"></i> Chamado
+                    </button>
+                    <button onclick="copiarParecer('email')" class="flex-1 sm:flex-none bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold py-2 px-4 rounded-lg transition shadow-sm flex items-center justify-center gap-2">
+                        <i class="fas fa-envelope"></i> E-mail
+                    </button>
+                </div>
+            </div>`;
+        }
+
+        // Status card
+        if (status === 'success') {
+            const total = Object.values(riscos).reduce((s,l) => s + l.length, 0);
+            html += `
+            <div class="rounded-xl border border-rose-100 bg-rose-50 p-6 flex items-start gap-5 result-in">
+                <div class="bg-white p-3 rounded-full shadow-sm text-rose-500 border border-rose-100 flex-shrink-0"><i class="fas fa-ban fa-xl"></i></div>
+                <div class="flex-1">
+                    <div class="flex justify-between items-start gap-2">
+                        <h3 class="text-lg font-bold text-rose-900">Riscos Identificados</h3>
+                        <span class="text-[10px] font-bold uppercase bg-white border border-rose-200 text-rose-600 px-2 py-1 rounded flex-shrink-0">Reprovado</span>
+                    </div>
+                    <p class="text-sm text-rose-700 mt-1">Foram detectados <strong>${total}</strong> conflito(s) de Segregação de Funções.</p>
+                    <div class="mt-4 pt-4 border-t border-rose-200/50 flex flex-wrap gap-4 text-xs text-rose-800">
+                        <span><i class="fas fa-user mr-1"></i> Perfil: <b>${esc(perfil)}</b></span>
+                        <span><i class="fas fa-tag mr-1"></i> Cenário: <b>${cenarioLabel}</b></span>
+                    </div>
+                </div>
+            </div>`;
+        } else if (status === 'no_risks') {
+            html += `
+            <div class="rounded-xl border border-emerald-100 bg-emerald-50 p-6 flex items-start gap-5 result-in">
+                <div class="bg-white p-3 rounded-full shadow-sm text-emerald-500 border border-emerald-100 flex-shrink-0"><i class="fas fa-check-circle fa-xl"></i></div>
+                <div class="flex-1">
+                    <div class="flex justify-between items-start gap-2">
+                        <h3 class="text-lg font-bold text-emerald-900">Nenhum Conflito</h3>
+                        <span class="text-[10px] font-bold uppercase bg-white border border-emerald-200 text-emerald-600 px-2 py-1 rounded flex-shrink-0">Aprovado</span>
+                    </div>
+                    <p class="text-sm text-emerald-700 mt-1">Funcionalidades analisadas sem impedimentos na matriz.</p>
+                    <div class="mt-4 pt-4 border-t border-emerald-200/50 flex flex-wrap gap-4 text-xs text-emerald-800">
+                        <span><i class="fas fa-user mr-1"></i> Perfil: <b>${esc(perfil)}</b></span>
+                        <span><i class="fas fa-tag mr-1"></i> Cenário: <b>${cenarioLabel}</b></span>
+                    </div>
+                </div>
+            </div>`;
+        } else {
+            html += `
+            <div class="rounded-xl border border-amber-200 bg-amber-50 p-5 result-in">
+                <p class="text-sm text-amber-800 font-medium"><i class="fas fa-info-circle mr-2"></i>${esc(message||'')}</p>
+            </div>`;
+        }
+
+        html += `<div class="space-y-3">`;
+
+        // Detalhes dos conflitos
+        if (status === 'success' && riscos) {
+            let conflitosHtml = '';
+            for (const [func, lista] of Object.entries(riscos)) {
+                conflitosHtml += `
+                <div class="mb-5 last:mb-0">
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Gatilho</span>
+                        <span class="text-xs font-mono font-bold text-slate-700 bg-white border border-gray-200 px-2 py-1 rounded">${esc(func)}</span>
+                    </div>
+                    <div class="overflow-hidden rounded-lg border border-gray-200 bg-white">
+                        <table class="w-full text-xs text-left">
+                            <thead class="bg-gray-50 text-gray-500 font-semibold border-b border-gray-100">
+                                <tr>
+                                    <th class="px-4 py-2 w-16">ID</th>
+                                    <th class="px-4 py-2">Risco</th>
+                                    <th class="px-4 py-2 w-24">Criticidade</th>
+                                    <th class="px-4 py-2">Conflita Com</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                ${lista.map(r => `
+                                <tr class="hover:bg-gray-50">
+                                    <td class="px-4 py-2 font-bold text-rose-600">${esc(r['ID Risco'])}</td>
+                                    <td class="px-4 py-2 text-gray-600">${esc(r['Descrição Risco'])}</td>
+                                    <td class="px-4 py-2 font-medium text-slate-600">${esc(r['Criticidade']||'—')}</td>
+                                    <td class="px-4 py-2 font-semibold text-slate-700">${esc(r['Conflito Com'])}</td>
+                                </tr>`).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>`;
+            }
+            html += `
+            <details class="group rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden result-in" open>
+                <summary class="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50 transition">
+                    <span class="flex items-center gap-3 text-sm font-bold text-slate-700">
+                        <i class="fas fa-bug text-rose-500"></i> Detalhes dos Conflitos
+                    </span>
+                    <i class="fas fa-chevron-down text-gray-400 transition-transform group-open:rotate-180"></i>
+                </summary>
+                <div class="border-t border-gray-100 bg-gray-50/30">
+                    <div class="max-h-96 overflow-y-auto p-5">${conflitosHtml}</div>
+                </div>
+            </details>`;
+        }
+
+        // Escopo analisado
+        if (escopo_analisado && escopo_analisado.length > 0) {
+            html += `
+            <details class="group rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden result-in">
+                <summary class="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50 transition">
+                    <span class="flex items-center gap-3 text-sm font-bold text-slate-700">
+                        <i class="fas fa-list-ul text-slate-400"></i> Escopo Analisado
+                        <span class="text-[10px] bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-full text-gray-500 font-normal">${escopo_analisado.length}</span>
+                    </span>
+                    <i class="fas fa-chevron-down text-gray-400 transition-transform group-open:rotate-180"></i>
+                </summary>
+                <div class="border-t border-gray-200">
+                    <div class="max-h-56 overflow-y-auto">
+                        <table class="w-full text-xs text-left">
+                            <thead class="bg-gray-50 text-gray-500 sticky top-0 border-b border-gray-100">
+                                <tr><th class="px-4 py-2">Sistema</th><th class="px-4 py-2">Funcionalidade</th></tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100 text-gray-600">
+                                ${escopo_analisado.map(i => `
+                                <tr class="hover:bg-gray-50">
+                                    <td class="px-4 py-2 text-gray-400">${esc(i.Sistema)}</td>
+                                    <td class="px-4 py-2 font-medium">${esc(i.Funcionalidade)}</td>
+                                </tr>`).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </details>`;
+        }
+
+        // Consultar Matriz
+        if (matriz_referencia && matriz_referencia.length > 0) {
+            html += `
+            <details class="group rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden result-in">
+                <summary class="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50 transition">
+                    <span class="flex items-center gap-3 text-sm font-bold text-slate-700">
+                        <i class="fas fa-search text-slate-400"></i> Consultar Matriz
+                    </span>
+                    <i class="fas fa-chevron-down text-gray-400 transition-transform group-open:rotate-180"></i>
+                </summary>
+                <div class="p-4 border-t border-gray-200">
+                    <div class="relative mb-3">
+                        <i class="fas fa-filter absolute left-3 top-2.5 text-gray-300 text-xs"></i>
+                        <input type="text" oninput="filtrarMatriz(this)"
+                               class="w-full pl-8 p-2 text-xs border border-gray-200 bg-gray-50 rounded-lg focus:border-slate-400 focus:bg-white focus:ring-0 outline-none transition"
+                               placeholder="Filtrar por risco ou funcionalidade...">
+                    </div>
+                    <div class="max-h-60 overflow-y-auto border border-gray-100 rounded-lg">
+                        <table class="w-full text-xs text-left" id="tabelaMatriz">
+                            <thead class="bg-gray-50 text-gray-500 sticky top-0 border-b border-gray-100">
+                                <tr>
+                                    <th class="px-3 py-2 w-16 bg-gray-50">ID</th>
+                                    <th class="px-3 py-2 bg-gray-50">Descrição</th>
+                                    <th class="px-3 py-2 bg-gray-50">Func. 1</th>
+                                    <th class="px-3 py-2 bg-gray-50">Func. 2</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100 text-gray-600">
+                                ${matriz_referencia.map(i => `
+                                <tr class="hover:bg-gray-50">
+                                    <td class="px-3 py-2 font-mono text-[10px] text-gray-400">${esc(i['ID Risco'])}</td>
+                                    <td class="px-3 py-2">${esc(i['Descrição Risco'])}</td>
+                                    <td class="px-3 py-2 font-mono text-slate-700">${esc(i['Funcionalidade'])}</td>
+                                    <td class="px-3 py-2 font-mono text-slate-700">${esc(i['Funcionalidade 2'])}</td>
+                                </tr>`).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </details>`;
+        }
+
+        html += `</div>`;
+        area.innerHTML = html;
+        area.classList.remove('hidden');
+    }
+
+    function filtrarMatriz(input) {
+        const val = input.value.toLowerCase();
+        document.querySelectorAll('#tabelaMatriz tbody tr').forEach(row => {
+            row.style.display = row.textContent.toLowerCase().includes(val) ? '' : 'none';
+        });
+    }
+
+    function esc(str) {
+        return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function copiarParecer(tipo) {
+        if (!DADOS_PARECER) return;
+        const { status, perfil, modulo, riscos } = DADOS_PARECER;
+        if (status !== 'success') return;
+
+        const cenarioLabel = document.querySelector('input[name="analysis_type"]:checked').value === 'manutencao'
+            ? 'Manutenção' : 'Criação';
+        const ticket = (document.getElementById('input-ticket').value || '').trim();
+        const ticketLabel = ticket ? `#${ticket}` : '#______';
+        const moduloLabel = modulo || '________';
+        const hoje = new Date().toLocaleDateString('pt-BR');
+
+        // Para o chamado: lista funcionalidades com risco + IDs
+        let linhasChamado = '';
+        // Para o email: só as funcionalidades que apresentaram risco
+        let linhasEmail = '';
+        for (const [func, arr] of Object.entries(riscos)) {
+            const vistos = new Set();
+            const ids = [...new Set(arr.map(r => r['ID Risco']).filter(Boolean))];
+            linhasChamado += `  • ${func} (${ids.join(', ')})\n`;
+            linhasEmail   += `  • ${func}\n`;
+        }
+
+        const nFuncs = Object.keys(riscos).length;
+
+        const notaChamado =
+`Análise SoD concluída — ${hoje}
+Perfil: ${perfil} | Módulo: ${moduloLabel} | Cenário: ${cenarioLabel}
+
+Foram identificados riscos de Segregação de Funções (SoD). O chamado não pode ser aprovado enquanto os conflitos abaixo não forem tratados.
+
+Funcionalidades com risco (${nFuncs}):
+${linhasChamado.trimEnd()}
+
+Pendência: revisar as permissões do perfil ou encaminhar para aprovação formal de risco residual.`;
+
+        const notaEmail =
+`Assunto: Análise e Aprovação: Análise SOD em ANEXO
+
+Olá, como vai?
+
+Peço a gentileza de analisar e aprovar a análise SOD em anexo.
+Sua aprovação nesta solicitação é importante, pois faz parte do nosso processo de Gestão de Acesso.
+
+Para facilitar o processo da aprovação basta somente responder este e-mail com "De Acordo".
+
+Para a liberação das funcionalidades do perfil ${perfil} no Módulo ${moduloLabel}, será necessário verificar os riscos apresentados na análise SOD para os quais não foram encontrados controles compensatórios.
+
+Funcionalidades com risco identificado:
+${linhasEmail.trimEnd()}
+
+O Excel em anexo contém a análise SOD com os riscos encontrados.
+A ${cenarioLabel} do Perfil foi solicitada a partir do ticket ${ticketLabel}.
+
+Att.`;
+
+        const texto = tipo === 'chamado' ? notaChamado : notaEmail;
+        navigator.clipboard.writeText(texto)
+            .then(() => showToast(`Nota (${tipo}) copiada!`, 'success'))
+            .catch(() => showToast('Não foi possível copiar.', 'error'));
+    }
+</script>
+{% endblock %}

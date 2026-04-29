@@ -1,0 +1,10 @@
+Flask
+pandas
+openpyxl
+rapidfuzz
+xlsxwriter
+xlrd
+pdfplumber
+psycopg2-binary
+sqlalchemy
+gunicorn
