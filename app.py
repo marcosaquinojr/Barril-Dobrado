@@ -400,7 +400,7 @@ def analisar_riscos_excel(caminho_arquivo, cenario):
     idx_relatorio = None
     idx_riscos = None
 
-    col0 = df_bruto.iloc[:, 0].astype(str)
+    col0 = df_bruto.iloc[:, 0].apply(lambda x: '' if pd.isna(x) else str(x))
     for idx, val in col0.items():
         if "Relatório da Análise de ticket do perfil" in val: idx_relatorio = idx
         if "Riscos SoD para perfil" in val: idx_riscos = idx
@@ -614,7 +614,7 @@ def extrair_sod_pdf(filepath, cenario):
     if df_riscos.empty:
         return {'status': 'no_risks', 'perfil': perfil, 'modulo': modulo, 'escopo_analisado': escopo, 'matriz_referencia': matriz}
 
-    funcs = df_add['Funcionalidade'].dropna().unique().tolist()
+    funcs = [str(f) for f in df_add['Funcionalidade'].dropna().unique() if not isinstance(f, float) and str(f).strip()]
     match = df_riscos[df_riscos['Funcionalidade'].isin(funcs) | df_riscos['Funcionalidade 2'].isin(funcs)].copy()
 
     if match.empty:
@@ -623,7 +623,8 @@ def extrair_sod_pdf(filepath, cenario):
     modulo_match = _normalizar_modulo(match['Módulo'].dropna().iloc[0]) if 'Módulo' in match.columns and not match['Módulo'].dropna().empty else modulo
     agrupado = {}
     for _, r in match.iterrows():
-        f1, f2 = r['Funcionalidade'], r['Funcionalidade 2']
+        f1 = str(r['Funcionalidade']) if not isinstance(r['Funcionalidade'], float) else ''
+        f2 = str(r['Funcionalidade 2']) if not isinstance(r['Funcionalidade 2'], float) else ''
         gatilho, conflito = (f1, f2) if f1 in funcs else (f2, f1)
         if gatilho:
             if gatilho not in agrupado:
