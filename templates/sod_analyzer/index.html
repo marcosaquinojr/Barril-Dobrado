@@ -475,22 +475,7 @@ Att.`;
     }
 
     function copiarParecerAprovado() {
-        if (!DADOS_PARECER) return;
-        const { perfil, modulo } = DADOS_PARECER;
-        const cenarioLabel = document.querySelector('input[name="analysis_type"]:checked').value === 'manutencao'
-            ? 'Manutenção' : 'Criação';
-        const ticket = (document.getElementById('input-ticket').value || '').trim();
-        const ticketLabel = ticket ? `#${ticket}` : '#______';
-        const moduloLabel = modulo || '________';
-        const hoje = new Date().toLocaleDateString('pt-BR');
-
-        const nota =
-`Análise SoD concluída — ${hoje}
-Perfil: ${perfil} | Módulo: ${moduloLabel} | Cenário: ${cenarioLabel}
-
-Análise de Segregação de Funções (SoD) realizada para o chamado ${ticketLabel}.
-
-Nenhum conflito de SoD foi identificado para as funcionalidades analisadas. O chamado pode ser aprovado.`;
+        const nota = `Nenhum conflito de SoD foi identificado para as funcionalidades analisadas.`;
 
         navigator.clipboard.writeText(nota)
             .then(() => showToast('Nota copiada para a área de transferência!', 'success'))
