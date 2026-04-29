@@ -257,9 +257,14 @@
                         <span class="text-[10px] font-bold uppercase bg-white border border-emerald-200 text-emerald-600 px-2 py-1 rounded flex-shrink-0">Aprovado</span>
                     </div>
                     <p class="text-sm text-emerald-700 mt-1">Funcionalidades analisadas sem impedimentos na matriz.</p>
-                    <div class="mt-4 pt-4 border-t border-emerald-200/50 flex flex-wrap gap-4 text-xs text-emerald-800">
-                        <span><i class="fas fa-user mr-1"></i> Perfil: <b>${esc(perfil)}</b></span>
-                        <span><i class="fas fa-tag mr-1"></i> Cenário: <b>${cenarioLabel}</b></span>
+                    <div class="mt-4 pt-4 border-t border-emerald-200/50 flex flex-wrap items-center justify-between gap-3">
+                        <div class="flex flex-wrap gap-4 text-xs text-emerald-800">
+                            <span><i class="fas fa-user mr-1"></i> Perfil: <b>${esc(perfil)}</b></span>
+                            <span><i class="fas fa-tag mr-1"></i> Cenário: <b>${cenarioLabel}</b></span>
+                        </div>
+                        <button onclick="copiarParecerAprovado()" class="flex items-center gap-2 bg-white hover:bg-emerald-50 text-emerald-700 text-xs font-bold py-2 px-4 rounded-lg transition border border-emerald-200 hover:shadow-sm flex-shrink-0">
+                            <i class="fas fa-copy"></i> Copiar para Chamado
+                        </button>
                     </div>
                 </div>
             </div>`;
@@ -466,6 +471,29 @@ Att.`;
         const texto = tipo === 'chamado' ? notaChamado : notaEmail;
         navigator.clipboard.writeText(texto)
             .then(() => showToast(`Nota (${tipo}) copiada!`, 'success'))
+            .catch(() => showToast('Não foi possível copiar.', 'error'));
+    }
+
+    function copiarParecerAprovado() {
+        if (!DADOS_PARECER) return;
+        const { perfil, modulo } = DADOS_PARECER;
+        const cenarioLabel = document.querySelector('input[name="analysis_type"]:checked').value === 'manutencao'
+            ? 'Manutenção' : 'Criação';
+        const ticket = (document.getElementById('input-ticket').value || '').trim();
+        const ticketLabel = ticket ? `#${ticket}` : '#______';
+        const moduloLabel = modulo || '________';
+        const hoje = new Date().toLocaleDateString('pt-BR');
+
+        const nota =
+`Análise SoD concluída — ${hoje}
+Perfil: ${perfil} | Módulo: ${moduloLabel} | Cenário: ${cenarioLabel}
+
+Análise de Segregação de Funções (SoD) realizada para o chamado ${ticketLabel}.
+
+Nenhum conflito de SoD foi identificado para as funcionalidades analisadas. O chamado pode ser aprovado.`;
+
+        navigator.clipboard.writeText(nota)
+            .then(() => showToast('Nota copiada para a área de transferência!', 'success'))
             .catch(() => showToast('Não foi possível copiar.', 'error'));
     }
 </script>
