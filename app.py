@@ -28,9 +28,15 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'barril-dobrado-dev-key-mude-em-producao')
 
+def _normalise_db_url(url: str) -> str:
+    """Remove qualquer sslmode da URL — SSL é forçado via kwarg no connect()."""
+    import re
+    url = url.replace('postgres://', 'postgresql://', 1)
+    url = re.sub(r'[?&]sslmode=[^&]*', '', url).rstrip('?&')
+    return url
+
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
-# SQLAlchemy exige postgresql://, não postgres://
-_SA_DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
+_SA_DATABASE_URL = _normalise_db_url(DATABASE_URL) + ('&' if '?' in _normalise_db_url(DATABASE_URL) else '?') + 'sslmode=require' if DATABASE_URL else ''
 
 _SEED_USERNAME = os.environ.get('APP_USERNAME', 'admin')
 _SEED_PASSWORD = os.environ.get('APP_PASSWORD', 'barril2025')
@@ -69,7 +75,7 @@ class DBConn:
 
 
 def get_db_connection() -> DBConn:
-    conn = psycopg2.connect(DATABASE_URL)
+    conn = psycopg2.connect(_normalise_db_url(DATABASE_URL), sslmode='require')
     return DBConn(conn)
 
 
@@ -100,7 +106,7 @@ def setup():
         logger.error("DATABASE_URL não configurada. Configure a variável de ambiente.")
         return
 
-    conn = psycopg2.connect(DATABASE_URL)
+    conn = psycopg2.connect(_normalise_db_url(DATABASE_URL), sslmode='require')
     cur = conn.cursor()
 
     cur.execute('''
