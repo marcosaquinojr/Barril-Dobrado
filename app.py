@@ -56,7 +56,7 @@ _SEED_USERNAME = os.environ.get('APP_USERNAME', 'admin')
 _SEED_PASSWORD = os.environ.get('APP_PASSWORD', 'barril2025')
 
 app.config['MAX_CONTENT_LENGTH'] = 32 * 1024 * 1024  # 32 MB (Excel VAR pode ser grande)
-PDF_MAX_BYTES = 5 * 1024 * 1024  # 5 MB por PDF
+PDF_MAX_BYTES = 15 * 1024 * 1024  # 15 MB por PDF
 
 LIMIAR_ALERTA = 0.90
 MODULOS_PADRAO = [
@@ -878,7 +878,7 @@ def comparar_perfis_route():
     for f_check in [f_espelho, f_solicitado]:
         f_check.seek(0, 2)
         if f_check.tell() > PDF_MAX_BYTES:
-            return jsonify({'erro': f'PDF "{f_check.filename}" muito grande. Limite: 5 MB.'}), 413
+            return jsonify({'erro': f'PDF "{f_check.filename}" muito grande. Limite: 15 MB.'}), 413
         f_check.seek(0)
 
     fd_e, path_e = tempfile.mkstemp(suffix='.pdf')
@@ -1048,7 +1048,7 @@ def analisar_sod():
     if ext == 'pdf':
         file.seek(0, 2)
         if file.tell() > PDF_MAX_BYTES:
-            return jsonify({'status': 'error', 'message': f'PDF muito grande. Limite: 5 MB.'}), 413
+            return jsonify({'status': 'error', 'message': f'PDF muito grande. Limite: 15 MB.'}), 413
         file.seek(0)
 
     fd, fpath = tempfile.mkstemp(suffix=f'.{ext}')
