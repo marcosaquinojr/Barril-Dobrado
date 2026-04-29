@@ -388,7 +388,7 @@ def consolidar_colunas(df, col_inicio, col_fim):
         col_fim_real = min(col_fim, len(df.columns))
         return df.iloc[:, col_inicio:col_fim_real].fillna('').astype(str).agg(''.join, axis=1)
     except Exception:
-        return pd.Series([""] * len(df))
+        return pd.Series([""] * len(df), index=df.index)
 
 
 def analisar_riscos_excel(caminho_arquivo, cenario):
@@ -465,8 +465,13 @@ def analisar_riscos_excel(caminho_arquivo, cenario):
         if df_add.empty:
             return {'status': 'no_risks', 'message': "Sem itens 'Adicionado'.", 'perfil': perfil, 'escopo_analisado': escopo, 'matriz_referencia': matriz}
 
-        funcs = df_add['Funcionalidade'].dropna().unique().tolist()
-        match = df_riscos[df_riscos['Funcionalidade'].isin(funcs) | df_riscos['Funcionalidade 2'].isin(funcs)].copy()
+        funcs = set(
+            str(f) for f in df_add['Funcionalidade'].unique()
+            if pd.notna(f) and str(f).strip()
+        )
+        func_col = df_riscos['Funcionalidade'].fillna('').astype(str)
+        func2_col = df_riscos['Funcionalidade 2'].fillna('').astype(str)
+        match = df_riscos[func_col.isin(funcs) | func2_col.isin(funcs)].copy()
 
         if match.empty:
             return {'status': 'no_risks', 'perfil': perfil, 'escopo_analisado': escopo, 'matriz_referencia': matriz}
@@ -474,7 +479,8 @@ def analisar_riscos_excel(caminho_arquivo, cenario):
         modulo = match['Módulo'].dropna().iloc[0] if 'Módulo' in match.columns and not match['Módulo'].dropna().empty else ''
         agrupado = {}
         for r in match.to_dict('records'):
-            f1, f2 = r['Funcionalidade'], r['Funcionalidade 2']
+            f1 = str(r.get('Funcionalidade') or '')
+            f2 = str(r.get('Funcionalidade 2') or '')
             gatilho, conflito = (f1, f2) if f1 in funcs else (f2, f1)
 
             if gatilho:
