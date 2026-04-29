@@ -1,5 +1,6 @@
 import os
 import logging
+import socket
 import tempfile
 import pandas as pd
 import io
@@ -17,6 +18,14 @@ from werkzeug.utils import secure_filename
 from werkzeug.security import check_password_hash, generate_password_hash
 from rapidfuzz import process, fuzz
 from sqlalchemy import create_engine, text as sa_text
+
+# Railway não suporta IPv6 — força resolução IPv4 em todas as conexões de rede
+_orig_getaddrinfo = socket.getaddrinfo
+def _getaddrinfo_ipv4(*args, **kwargs):
+    responses = _orig_getaddrinfo(*args, **kwargs)
+    ipv4 = [r for r in responses if r[0] == socket.AF_INET]
+    return ipv4 if ipv4 else responses
+socket.getaddrinfo = _getaddrinfo_ipv4
 
 logging.basicConfig(
     level=logging.INFO,
