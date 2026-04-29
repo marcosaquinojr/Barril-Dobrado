@@ -55,7 +55,8 @@ _SA_DATABASE_URL = _normalise_db_url(DATABASE_URL) + ('&' if '?' in _normalise_d
 _SEED_USERNAME = os.environ.get('APP_USERNAME', 'admin')
 _SEED_PASSWORD = os.environ.get('APP_PASSWORD', 'barril2025')
 
-app.config['MAX_CONTENT_LENGTH'] = 32 * 1024 * 1024  # 32 MB
+app.config['MAX_CONTENT_LENGTH'] = 32 * 1024 * 1024  # 32 MB (Excel VAR pode ser grande)
+PDF_MAX_BYTES = 5 * 1024 * 1024  # 5 MB por PDF
 
 LIMIAR_ALERTA = 0.90
 MODULOS_PADRAO = [
@@ -874,6 +875,12 @@ def comparar_perfis_route():
     if not (f_espelho.filename.lower().endswith('.pdf') and f_solicitado.filename.lower().endswith('.pdf')):
         return jsonify({'erro': 'Apenas arquivos PDF são aceitos.'}), 400
 
+    for f_check in [f_espelho, f_solicitado]:
+        f_check.seek(0, 2)
+        if f_check.tell() > PDF_MAX_BYTES:
+            return jsonify({'erro': f'PDF "{f_check.filename}" muito grande. Limite: 5 MB.'}), 413
+        f_check.seek(0)
+
     fd_e, path_e = tempfile.mkstemp(suffix='.pdf')
     fd_s, path_s = tempfile.mkstemp(suffix='.pdf')
     os.close(fd_e)
@@ -1037,6 +1044,13 @@ def analisar_sod():
         return jsonify({'status': 'error', 'message': 'Formato inválido. Envie um arquivo .xlsx, .xls ou .pdf.'}), 400
 
     cenario = request.form.get('analysis_type', 'manutencao')
+
+    if ext == 'pdf':
+        file.seek(0, 2)
+        if file.tell() > PDF_MAX_BYTES:
+            return jsonify({'status': 'error', 'message': f'PDF muito grande. Limite: 5 MB.'}), 413
+        file.seek(0)
+
     fd, fpath = tempfile.mkstemp(suffix=f'.{ext}')
     os.close(fd)
     file.save(fpath)
