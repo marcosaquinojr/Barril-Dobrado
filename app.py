@@ -133,8 +133,14 @@ def setup():
             role TEXT NOT NULL DEFAULT 'user',
             ativo SMALLINT NOT NULL DEFAULT 1,
             criado_em TEXT NOT NULL,
-            ultimo_acesso TEXT
+            ultimo_acesso TEXT,
+            deve_trocar_senha SMALLINT NOT NULL DEFAULT 0
         )
+    ''')
+    # Migração: adiciona coluna se o banco já existia sem ela
+    cur.execute('''
+        ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS
+        deve_trocar_senha SMALLINT NOT NULL DEFAULT 0
     ''')
 
     # conteudo BYTEA armazena o arquivo Excel da base VAR no banco (sem depender de disco)
@@ -233,6 +239,8 @@ def require_login(f):
     def decorated(*args, **kwargs):
         if not session.get('logged_in'):
             return redirect(url_for('login'))
+        if session.get('deve_trocar_senha'):
+            return redirect(url_for('primeiro_acesso'))
         return f(*args, **kwargs)
     return decorated
 
@@ -270,6 +278,9 @@ def login():
             session['role'] = user['role']
             session['nome_completo'] = user['nome_completo'] or username
             session['login_time'] = ts
+            session['deve_trocar_senha'] = bool(user['deve_trocar_senha'])
+            if user['deve_trocar_senha']:
+                return redirect(url_for('primeiro_acesso'))
             return redirect(url_for('home'))
         conn.close()
         flash('Usuário ou senha incorretos.', 'danger')
@@ -280,6 +291,37 @@ def login():
 def logout():
     session.clear()
     return redirect(url_for('login'))
+
+
+@app.route('/primeiro_acesso', methods=['GET', 'POST'])
+def primeiro_acesso():
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+    if not session.get('deve_trocar_senha'):
+        return redirect(url_for('home'))
+
+    if request.method == 'POST':
+        data = request.get_json()
+        nova_senha = (data.get('nova_senha') or '').strip()
+
+        if len(nova_senha) < 6:
+            return jsonify({'success': False, 'message': 'A senha deve ter no mínimo 6 caracteres.'}), 400
+
+        try:
+            ph = generate_password_hash(nova_senha, method='pbkdf2:sha256')
+            conn = get_db_connection()
+            conn.execute(
+                'UPDATE usuarios SET password_hash = ?, deve_trocar_senha = 0 WHERE username = ?',
+                (ph, session['username'])
+            )
+            conn.commit()
+            conn.close()
+            session['deve_trocar_senha'] = False
+            return jsonify({'success': True})
+        except Exception as e:
+            return jsonify({'success': False, 'message': str(e)}), 500
+
+    return render_template('auth/primeiro_acesso.html')
 
 
 # --- RESULTADOS TEMPORÁRIOS (substituem a pasta outputs/) ---
@@ -757,12 +799,12 @@ def admin_criar_usuario():
         ts = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
         ph = generate_password_hash(senha, method='pbkdf2:sha256')
         conn.execute(
-            'INSERT INTO usuarios (username, password_hash, nome_completo, role, ativo, criado_em) VALUES (?, ?, ?, ?, 1, ?)',
+            'INSERT INTO usuarios (username, password_hash, nome_completo, role, ativo, criado_em, deve_trocar_senha) VALUES (?, ?, ?, ?, 1, ?, 1)',
             (username, ph, nome, role, ts)
         )
         conn.commit()
         conn.close()
-        return jsonify({'success': True, 'message': f'Usuário "{username}" criado com sucesso.'})
+        return jsonify({'success': True, 'message': f'Usuário "{username}" criado com sucesso. Ele deverá definir uma senha no primeiro acesso.'})
     except psycopg2.IntegrityError:
         return jsonify({'success': False, 'message': f'O usuário "{username}" já existe.'}), 409
     except Exception as e:
