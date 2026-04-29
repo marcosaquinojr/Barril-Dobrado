@@ -29,9 +29,14 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'barril-dobrado-dev-key-mude-em-producao')
 
 def _normalise_db_url(url: str) -> str:
-    """Remove qualquer sslmode da URL — SSL é forçado via kwarg no connect()."""
+    """Normaliza a DATABASE_URL para uso com psycopg2."""
     import re
+    url = url.strip()
+    # Remove prefixo acidental "DATABASE_URL=..." caso o usuário copie a linha inteira
+    if not url.startswith(('postgresql://', 'postgres://')) and '=' in url:
+        url = url.split('=', 1)[1].strip()
     url = url.replace('postgres://', 'postgresql://', 1)
+    # Remove sslmode da URL — é passado via kwarg no connect()
     url = re.sub(r'[?&]sslmode=[^&]*', '', url).rstrip('?&')
     return url
 
