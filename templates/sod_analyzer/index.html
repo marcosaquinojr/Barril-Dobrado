@@ -80,12 +80,16 @@
         <p id="hint-arquivo" class="text-xs text-gray-400">Selecione o arquivo para habilitar a análise</p>
     </div>
 
-    <!-- Loading -->
-    <div id="loading" class="hidden text-center py-12">
-        <div class="inline-flex flex-col items-center gap-3">
-            <div class="w-10 h-10 border-4 border-slate-200 border-t-slate-700 rounded-full animate-spin"></div>
-            <p class="text-sm text-slate-500 font-medium">Analisando matriz de riscos...</p>
+    <!-- Barra de progresso -->
+    <div id="loading" class="hidden rounded-xl border border-gray-200 bg-white shadow-sm p-6">
+        <div class="flex items-center justify-between mb-2">
+            <p id="progressLabel" class="text-xs font-semibold text-slate-600">Processando...</p>
+            <span id="progressPct" class="text-xs font-black text-slate-800 tabular-nums">0%</span>
         </div>
+        <div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+            <div id="progressBar" class="h-2 bg-slate-700 rounded-full transition-all duration-500" style="width: 0%"></div>
+        </div>
+        <p class="text-[10px] text-slate-400 mt-2">Análise SoD pode levar até 30 s dependendo do tamanho da matriz</p>
     </div>
 
     <!-- Área de resultado -->
@@ -152,6 +156,48 @@
         document.getElementById('results-area').classList.add('hidden');
     }
 
+    // --- Barra de progresso ---
+    let _progressTimer = null;
+    let _progressPct   = 0;
+
+    const ETAPAS_SOD = [
+        { limite: 25, label: 'Enviando arquivo...' },
+        { limite: 60, label: 'Lendo matriz de riscos...' },
+        { limite: 85, label: 'Cruzando conflitos SoD...' },
+        { limite: 93, label: 'Finalizando...' },
+    ];
+
+    function _iniciarProgresso(etapas) {
+        clearInterval(_progressTimer);
+        _progressPct = 0;
+        const bar   = document.getElementById('progressBar');
+        const pctEl = document.getElementById('progressPct');
+        const label = document.getElementById('progressLabel');
+        bar.style.width = '0%';
+        bar.className = 'h-2 bg-slate-700 rounded-full transition-all duration-500';
+        pctEl.textContent = '0%';
+
+        _progressTimer = setInterval(() => {
+            const etapa = etapas.find(e => _progressPct < e.limite) || etapas[etapas.length - 1];
+            label.textContent = etapa.label;
+            _progressPct += (etapa.limite - _progressPct) * 0.07;
+            if (_progressPct >= 93) _progressPct = 93;
+            bar.style.width = _progressPct.toFixed(0) + '%';
+            pctEl.textContent = _progressPct.toFixed(0) + '%';
+        }, 400);
+    }
+
+    function _pararProgresso(sucesso) {
+        clearInterval(_progressTimer);
+        _progressTimer = null;
+        if (sucesso) {
+            document.getElementById('progressBar').style.width = '100%';
+            document.getElementById('progressBar').className = 'h-2 bg-emerald-500 rounded-full transition-all duration-300';
+            document.getElementById('progressPct').textContent = '100%';
+            document.getElementById('progressLabel').textContent = 'Concluído!';
+        }
+    }
+
     // --- Análise AJAX ---
     let DADOS_PARECER = null;
 
@@ -165,13 +211,13 @@
         btnSubmit.innerHTML = '<i class="fas fa-circle-notch fa-spin mr-2"></i> Analisando...';
         document.getElementById('loading').classList.remove('hidden');
         document.getElementById('results-area').classList.add('hidden');
+        _iniciarProgresso(ETAPAS_SOD);
 
         const formData = new FormData();
         formData.append('file', file);
         formData.append('analysis_type', cenario);
 
         try {
-            // Timeout de 120s — análise SoD pode ser lenta após cold start no free tier
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 120000);
 
@@ -187,6 +233,7 @@
             }
 
             const data = await resp.json();
+            _pararProgresso(data.status !== 'error');
 
             if (data.status === 'error') {
                 showToast(data.message || 'Erro ao processar.', 'error');
@@ -199,20 +246,25 @@
                 modulo: data.modulo || '',
                 riscos: data.data || {}
             };
-            renderResultado(data, cenario);
-            document.getElementById('results-area').scrollIntoView({ behavior: 'smooth', block: 'start' });
-            showToast('Análise concluída!', 'success');
+
+            setTimeout(() => {
+                document.getElementById('loading').classList.add('hidden');
+                renderResultado(data, cenario);
+                document.getElementById('results-area').scrollIntoView({ behavior: 'smooth', block: 'start' });
+                showToast('Análise concluída!', 'success');
+            }, 500);
 
         } catch (err) {
+            _pararProgresso(false);
+            document.getElementById('loading').classList.add('hidden');
             if (err.name === 'AbortError') {
-                showToast('Tempo limite excedido (120s). O servidor pode estar acordando — tente novamente.', 'error');
+                showToast('Tempo limite excedido (120s). Tente novamente.', 'error');
             } else {
-                showToast('Falha na comunicação com o servidor. Aguarde e tente novamente.', 'error');
+                showToast('Falha na comunicação com o servidor.', 'error');
             }
         } finally {
             btnSubmit.disabled = false;
             btnSubmit.innerHTML = '<i class="fas fa-shield-alt mr-2"></i> Analisar SoD';
-            document.getElementById('loading').classList.add('hidden');
         }
     }
 
