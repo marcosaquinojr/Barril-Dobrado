@@ -171,7 +171,21 @@
         formData.append('analysis_type', cenario);
 
         try {
-            const resp = await fetch('/analisar_sod', { method: 'POST', body: formData });
+            // Timeout de 120s — análise SoD pode ser lenta após cold start no free tier
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 120000);
+
+            let resp;
+            try {
+                resp = await fetch('/analisar_sod', {
+                    method: 'POST',
+                    body: formData,
+                    signal: controller.signal
+                });
+            } finally {
+                clearTimeout(timeoutId);
+            }
+
             const data = await resp.json();
 
             if (data.status === 'error') {
@@ -190,7 +204,11 @@
             showToast('Análise concluída!', 'success');
 
         } catch (err) {
-            showToast('Falha na comunicação com o servidor.', 'error');
+            if (err.name === 'AbortError') {
+                showToast('Tempo limite excedido (120s). O servidor pode estar acordando — tente novamente.', 'error');
+            } else {
+                showToast('Falha na comunicação com o servidor. Aguarde e tente novamente.', 'error');
+            }
         } finally {
             btnSubmit.disabled = false;
             btnSubmit.innerHTML = '<i class="fas fa-shield-alt mr-2"></i> Analisar SoD';

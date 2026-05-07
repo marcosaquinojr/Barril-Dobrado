@@ -115,6 +115,20 @@ def _normalizar_modulo(raw):
     return raw
 
 
+def _detectar_modulo_pdf(raw_modulo):
+    """Identifica módulo TOTVS a partir do texto do cabeçalho do PDF.
+    Ex: 'RM Fluxus - TOTVS Gestão Financeira' → 'TOTVS Gestão Financeira'
+    """
+    if not raw_modulo:
+        return ''
+    raw_lower = raw_modulo.lower()
+    for modulo in MODULOS_PADRAO:
+        nome_sem_totvs = modulo.replace('TOTVS ', '').lower()
+        if nome_sem_totvs in raw_lower:
+            return modulo
+    return _normalizar_modulo(raw_modulo)
+
+
 def setup():
     """Cria tabelas no Postgres e faz seed do admin padrão."""
     if not DATABASE_URL:
@@ -639,7 +653,166 @@ def extrair_sod_pdf(filepath, cenario):
             'perfil': perfil, 'modulo': modulo_match, 'escopo_analisado': escopo, 'matriz_referencia': matriz}
 
 
+def _pdf_tem_texto(filepath):
+    """Retorna True se o PDF tem texto extraível (não é puramente vetorial/imagético)."""
+    try:
+        import fitz
+        doc = fitz.open(filepath)
+        for page in doc:
+            if page.get_text().strip():
+                doc.close()
+                return True
+        doc.close()
+    except Exception:
+        pass
+    # Fallback: tenta pdfplumber
+    try:
+        with pdfplumber.open(filepath) as pdf:
+            for page in pdf.pages:
+                if page.extract_text():
+                    return True
+    except Exception:
+        pass
+    return False
+
+
+def _parse_linha_ocr(linha):
+    """Parseia uma linha OCR de perfil TOTVS e retorna dict ou None."""
+    # Remove artefatos comuns do OCR (barras, marcas de tabela)
+    linha = re.sub(r'[|]', ' ', linha).strip()
+    # Deve começar com código numérico
+    m_code = re.match(r'^([\d\.]+)\s+', linha)
+    if not m_code:
+        return None
+    codigo = m_code.group(1)
+    resto = linha[m_code.end():]
+    # Remove True/False do final
+    m_perm = re.search(r'\s+(True|False)\s*$', resto)
+    if not m_perm:
+        return None
+    permitido = m_perm.group(1)
+    resto = resto[:m_perm.start()].strip()
+    # Remove codperfil do final: padrão Z seguido de letras maiúsculas/underscore/ponto/espaço
+    codperfil = ''
+    m_cp = re.search(r'\s+(Z[_\. A-Z0-9]+)\s*$', resto)
+    if m_cp:
+        raw_cp = m_cp.group(1).strip()
+        # Normaliza: Z_SECRETACADEM, Z SECRETACADEM → Z_SECRETACADEM
+        codperfil = re.sub(r'[\s\.]+', '_', raw_cp).rstrip('_')
+        resto = resto[:m_cp.start()].strip()
+    if len(resto) < 2:
+        return None
+    return {'codigo': codigo, 'funcionalidade': resto, 'codperfil': codperfil, 'permitido': permitido}
+
+
+def _extrair_perfil_pdf_ocr(filepath):
+    """Extrai funcionalidades de PDF sem texto usando OCR (PyMuPDF + pytesseract).
+    Otimizado para baixo consumo de memória: imagens em escala de cinza 2x salvas
+    em disco temporário, nunca carregadas na heap Python.
+    """
+    try:
+        import fitz
+    except ImportError:
+        logger.warning("PyMuPDF não disponível para OCR.")
+        return {'codperfil': '', 'modulo': '', 'emitido_por': '', 'data_hora': '', 'ambiente': ''}, pd.DataFrame()
+    try:
+        import pytesseract
+    except ImportError:
+        logger.warning("pytesseract não disponível para OCR.")
+        return {'codperfil': '', 'modulo': '', 'emitido_por': '', 'data_hora': '', 'ambiente': ''}, pd.DataFrame()
+
+    # Configura caminho do tesseract (Linux apt / macOS brew)
+    for candidate in ['/usr/bin/tesseract', '/usr/local/bin/tesseract', '/opt/homebrew/bin/tesseract']:
+        if os.path.isfile(candidate):
+            pytesseract.pytesseract.tesseract_cmd = candidate
+            break
+
+    info = {'codperfil': '', 'modulo': '', 'emitido_por': '', 'data_hora': '', 'ambiente': ''}
+    rows = []
+
+    regex_emitido  = re.compile(r'Emitido\s+por[:\s]+(\S+)', re.IGNORECASE)
+    regex_data     = re.compile(r'(\d{2}/\d{2}/\d{4}\s+\d{2}:\d{2})')
+    regex_modulo   = re.compile(r'Módulo[:\s]+(.+?)(?:\s+Ambiente|$)', re.IGNORECASE)
+    # Captura até 2 tokens após "Ambiente:" (ex: "RM NRE" ou "PRODUCAO")
+    regex_ambiente = re.compile(r'Ambiente[:\s]+(\S+(?:\s+\S+)?)', re.IGNORECASE)
+
+    # Determina se o idioma português está disponível no tesseract
+    try:
+        langs = pytesseract.get_languages()
+        lang = 'por' if 'por' in langs else 'eng'
+    except Exception:
+        lang = 'eng'
+
+    try:
+        doc = fitz.open(filepath)
+        for page_num, page in enumerate(doc):
+            # Escala de cinza 3x: ~4.5MB/página vs RGB 3x (~13.5MB)
+            # Salva direto em disco — nunca entra na heap Python
+            mat = fitz.Matrix(3, 3)
+            pix = page.get_pixmap(matrix=mat, colorspace=fitz.csGRAY)
+            fd, img_path = tempfile.mkstemp(suffix='.png')
+            os.close(fd)
+            pix.save(img_path)
+            del pix
+            gc.collect()
+
+            try:
+                text = pytesseract.image_to_string(img_path, lang=lang, config='--psm 3')
+            finally:
+                try:
+                    os.unlink(img_path)
+                except Exception:
+                    pass
+            gc.collect()
+
+            for linha in text.split('\n'):
+                linha = linha.strip()
+                if not linha:
+                    continue
+
+                # Extrai metadados do cabeçalho
+                if not info['emitido_por']:
+                    m = regex_emitido.search(linha)
+                    if m: info['emitido_por'] = m.group(1).strip()
+                if not info['data_hora']:
+                    m = regex_data.search(linha)
+                    if m: info['data_hora'] = m.group(1).strip()
+                if not info['modulo']:
+                    m = regex_modulo.search(linha)
+                    if m:
+                        info['modulo'] = re.sub(r'\s+Ambiente.*$', '', m.group(1), flags=re.IGNORECASE).strip()
+                if not info['ambiente']:
+                    m = regex_ambiente.search(linha)
+                    if m: info['ambiente'] = m.group(1).strip()
+
+                parsed = _parse_linha_ocr(linha)
+                if parsed:
+                    if not info['codperfil'] and parsed['codperfil']:
+                        info['codperfil'] = parsed['codperfil']
+                    if not parsed['codperfil'] and info['codperfil']:
+                        parsed['codperfil'] = info['codperfil']
+                    rows.append(parsed)
+
+        doc.close()
+    except Exception as e:
+        logger.exception("Erro ao extrair perfil PDF via OCR: %s", str(e))
+
+    df = pd.DataFrame(rows, columns=['codigo', 'funcionalidade', 'codperfil', 'permitido']) if rows else pd.DataFrame(columns=['codigo', 'funcionalidade', 'codperfil', 'permitido'])
+    df = df.drop_duplicates(subset=['codigo', 'funcionalidade'])
+    # Preenche codperfil vazio com o global (linhas de categoria não mostram codperfil no PDF)
+    if info['codperfil']:
+        df['codperfil'] = df['codperfil'].replace('', info['codperfil'])
+    return info, df
+
+
 def extrair_perfil_pdf(filepath):
+    """Extrai funcionalidades de PDF de perfil TOTVS.
+    Detecta automaticamente se o PDF tem texto nativo ou precisa de OCR.
+    """
+    if not _pdf_tem_texto(filepath):
+        logger.info("PDF sem texto nativo detectado — usando OCR.")
+        return _extrair_perfil_pdf_ocr(filepath)
+
     info = {'codperfil': '', 'modulo': '', 'emitido_por': '', 'data_hora': '', 'ambiente': ''}
     rows = []
     regex_row = re.compile(r'^([\d\.]+)\s+(.+?)\s+([\w_]+)\s+(True|False)\s*$')
@@ -724,6 +897,12 @@ def _comparar_dfs(df_espelho, df_solicitado):
 
 
 # --- ROTAS PRINCIPAIS ---
+@app.route('/health')
+def health():
+    """Endpoint de health check para manter o serviço acordado (UptimeRobot, etc)."""
+    return 'ok', 200
+
+
 @app.route('/')
 @require_login
 def home():
@@ -1279,6 +1458,40 @@ def visualizar_base_ativa():
         return jsonify({'erro': str(e)}), 500
 
 
+@app.route('/detectar_info_pdf', methods=['POST'])
+@require_login
+def detectar_info_pdf():
+    """Extrai metadados de um PDF de perfil TOTVS sem fazer a comparação completa."""
+    file = request.files.get('arquivo')
+    if not file or not file.filename.lower().endswith('.pdf'):
+        return jsonify({'erro': 'Envie um PDF válido.'}), 400
+
+    fd, tpath = tempfile.mkstemp(suffix='.pdf')
+    os.close(fd)
+    file.save(tpath)
+
+    try:
+        info, df = extrair_perfil_pdf(tpath)
+        modulo_detectado = _detectar_modulo_pdf(info.get('modulo', ''))
+        return jsonify({
+            'codperfil':             info.get('codperfil', ''),
+            'modulo_raw':            info.get('modulo', ''),
+            'modulo_detectado':      modulo_detectado,
+            'emitido_por':           info.get('emitido_por', ''),
+            'data_hora':             info.get('data_hora', ''),
+            'ambiente':              info.get('ambiente', ''),
+            'total_funcionalidades': len(df),
+        })
+    except Exception as e:
+        logger.exception("Erro em /detectar_info_pdf")
+        return jsonify({'erro': str(e)}), 500
+    finally:
+        try:
+            os.unlink(tpath)
+        except Exception:
+            pass
+
+
 @app.route('/comparar', methods=['POST'])
 @require_login
 def comparar():
@@ -1302,18 +1515,34 @@ def comparar():
         mod = request.form.get('modulo')
         fname = f.filename.lower()
         df_usr = pd.DataFrame()
+        _info_pdf = {}      # metadados do PDF (vazio para Excel)
+        _display_list = []  # strings de exibição por índice (código + nome)
 
         if fname.endswith('.pdf'):
             fd, tpath = tempfile.mkstemp(suffix='.pdf')
             os.close(fd)
             f.save(tpath)
-            df_usr = extrair_funcionalidades_pdf(tpath)
+            _info_pdf, df_perfil = extrair_perfil_pdf(tpath)
             try:
                 os.unlink(tpath)
             except Exception:
                 pass
-            if df_usr.empty:
-                return jsonify({'erro': "Não foi possível extrair dados do PDF."}), 400
+            if df_perfil.empty:
+                return jsonify({'erro': "Não foi possível extrair dados do PDF. Verifique o formato."}), 400
+
+            # Auto-detecta módulo a partir do cabeçalho do PDF
+            mod_detectado = _detectar_modulo_pdf(_info_pdf.get('modulo', ''))
+            if mod_detectado:
+                mod = mod_detectado
+
+            # Coluna de matching: nome da funcionalidade
+            df_usr = df_perfil[['funcionalidade']].rename(columns={'funcionalidade': 'Funcionalidade'})
+            # Display inclui o código para contexto na tabela de resultados
+            _display_list = [
+                f"[{row['codigo']}]  {row['funcionalidade']}"
+                for _, row in df_perfil.iterrows()
+            ]
+
         elif fname.endswith(('.xlsx', '.xls')):
             df_usr = pd.read_excel(f, usecols=[0])
             if df_usr.empty:
@@ -1341,7 +1570,10 @@ def comparar():
 
         res = []
         for i, u_norm in enumerate(l_usr):
-            display = df_usr.iloc[i, 0] if i < len(df_usr) else u_norm
+            if _display_list and i < len(_display_list):
+                display = _display_list[i]
+            else:
+                display = df_usr.iloc[i, 0] if i < len(df_usr) else u_norm
             item = {'id': i, 'Funcionalidade Analisada': str(display), 'Status': 'Divergente', 'ID Encontrado': '', 'ID Sugerido': '', 'Sugestão Similar (VAR)': '', 'Similaridade (%)': 0.0}
 
             if u_norm in v_map:
@@ -1369,7 +1601,12 @@ def comparar():
             f'Validação VAR · Módulo {mod} — {len(res)} funcionalidades comparadas, {divs} divergências'
         )
 
-        return jsonify({'resultados': res, 'mensagem_status': msg})
+        return jsonify({
+            'resultados': res,
+            'mensagem_status': msg,
+            'modulo_usado': mod,
+            'info_pdf': _info_pdf,
+        })
 
     except Exception as e:
         logger.exception("Erro na rota /comparar")

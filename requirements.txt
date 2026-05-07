@@ -8,3 +8,5 @@ pdfplumber
 psycopg2-binary
 sqlalchemy
 gunicorn
+pymupdf
+pytesseract

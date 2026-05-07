@@ -91,6 +91,30 @@
                     </button>
                 </div>
             </div>
+
+            <!-- Banner de metadados do PDF (visível apenas quando PDF detectado) -->
+            <div id="pdfInfoBanner" class="hidden mt-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <div class="flex items-start gap-3">
+                    <div class="w-7 h-7 bg-slate-200 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <i class="fas fa-id-card text-slate-600 text-xs"></i>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Dados detectados no PDF</p>
+                        <div class="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
+                            <div><span class="text-slate-400">Perfil:</span> <span id="pdfCodperfil" class="font-bold text-slate-800"></span></div>
+                            <div><span class="text-slate-400">Ambiente:</span> <span id="pdfAmbiente" class="font-semibold text-slate-700"></span></div>
+                            <div class="col-span-2"><span class="text-slate-400">Módulo:</span> <span id="pdfModulo" class="font-semibold text-slate-700"></span></div>
+                            <div><span class="text-slate-400">Emitido por:</span> <span id="pdfEmitidoPor" class="text-slate-600"></span></div>
+                            <div><span class="text-slate-400">Data/Hora:</span> <span id="pdfDataHora" class="text-slate-600"></span></div>
+                        </div>
+                        <p id="pdfDetectMsg" class="hidden mt-2 text-[10px] text-emerald-700 font-bold"><i class="fas fa-check-circle mr-1"></i>Módulo auto-selecionado no dropdown acima.</p>
+                    </div>
+                    <div class="flex-shrink-0 text-right">
+                        <span id="pdfTotalFuncs" class="text-lg font-black text-slate-800"></span>
+                        <p class="text-[10px] text-slate-400 leading-none">funções</p>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Botão -->
@@ -115,6 +139,18 @@
                 <i class="fas fa-file-excel"></i> Exportar VAR
             </button>
         </div>
+
+        <!-- Card de metadados do perfil (preenchido via JS quando há info_pdf) -->
+        <div id="resultInfoCard" class="hidden px-6 py-3 bg-slate-50 border-b border-gray-100">
+            <div class="flex flex-wrap items-center gap-x-6 gap-y-1 text-xs text-slate-600">
+                <span><span class="font-bold text-slate-800 mr-1">Perfil:</span><span id="resCodperfil"></span></span>
+                <span><span class="font-bold text-slate-800 mr-1">Módulo:</span><span id="resModulo"></span></span>
+                <span><span class="font-bold text-slate-800 mr-1">Ambiente:</span><span id="resAmbiente"></span></span>
+                <span><span class="font-bold text-slate-800 mr-1">Emitido por:</span><span id="resEmitidoPor"></span></span>
+                <span><span class="font-bold text-slate-800 mr-1">Data:</span><span id="resDataHora"></span></span>
+            </div>
+        </div>
+
         <div>
             <div id="skeletonLoader" class="hidden p-4 space-y-2">
                 {% for _ in range(8) %}
@@ -314,7 +350,14 @@
         if (f) { fileInput.files = e.dataTransfer.files; mostrarArquivo(f.name); }
     });
     fileInput.addEventListener('change', function() {
-        if (this.files[0]) mostrarArquivo(this.files[0].name);
+        if (this.files[0]) {
+            mostrarArquivo(this.files[0].name);
+            if (this.files[0].name.toLowerCase().endsWith('.pdf')) {
+                detectarInfoPdf(this.files[0]);
+            } else {
+                ocultarBannerPdf();
+            }
+        }
     });
 
     function mostrarArquivo(nome) {
@@ -339,6 +382,52 @@
         hintArquivo.textContent = 'Selecione o arquivo para iniciar a validação';
         hintArquivo.className = 'text-xs text-gray-400';
         document.getElementById('mainResultCard').classList.add('hidden');
+        document.getElementById('resultInfoCard').classList.add('hidden');
+        ocultarBannerPdf();
+    }
+
+    function ocultarBannerPdf() {
+        document.getElementById('pdfInfoBanner').classList.add('hidden');
+    }
+
+    function detectarInfoPdf(file) {
+        const banner = document.getElementById('pdfInfoBanner');
+        banner.classList.remove('hidden');
+        // Mostra estado de carregamento
+        document.getElementById('pdfCodperfil').textContent = '...';
+        document.getElementById('pdfAmbiente').textContent = '...';
+        document.getElementById('pdfModulo').textContent = '...';
+        document.getElementById('pdfEmitidoPor').textContent = '...';
+        document.getElementById('pdfDataHora').textContent = '...';
+        document.getElementById('pdfTotalFuncs').textContent = '...';
+        document.getElementById('pdfDetectMsg').classList.add('hidden');
+
+        const fd = new FormData();
+        fd.append('arquivo', file);
+        fetch('/detectar_info_pdf', { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(data => {
+                if (data.erro) { ocultarBannerPdf(); return; }
+                document.getElementById('pdfCodperfil').textContent   = data.codperfil   || '—';
+                document.getElementById('pdfAmbiente').textContent    = data.ambiente    || '—';
+                document.getElementById('pdfModulo').textContent      = data.modulo_raw  || '—';
+                document.getElementById('pdfEmitidoPor').textContent  = data.emitido_por || '—';
+                document.getElementById('pdfDataHora').textContent    = data.data_hora   || '—';
+                document.getElementById('pdfTotalFuncs').textContent  = data.total_funcionalidades || 0;
+
+                // Auto-seleciona módulo no dropdown se detectado
+                if (data.modulo_detectado) {
+                    const sel = document.getElementById('selectModulo');
+                    for (let i = 0; i < sel.options.length; i++) {
+                        if (sel.options[i].value === data.modulo_detectado) {
+                            sel.selectedIndex = i;
+                            document.getElementById('pdfDetectMsg').classList.remove('hidden');
+                            break;
+                        }
+                    }
+                }
+            })
+            .catch(() => ocultarBannerPdf());
     }
 
     // --- Submit ---
@@ -375,6 +464,21 @@
                 showToast(data.erro, 'error');
                 return;
             }
+
+            // Preenche card de metadados do PDF se disponível
+            const info = data.info_pdf || {};
+            const resCard = document.getElementById('resultInfoCard');
+            if (info.codperfil || info.ambiente || info.modulo) {
+                document.getElementById('resCodperfil').textContent  = info.codperfil   || data.modulo_usado || '—';
+                document.getElementById('resModulo').textContent     = data.modulo_usado || info.modulo || '—';
+                document.getElementById('resAmbiente').textContent   = info.ambiente    || '—';
+                document.getElementById('resEmitidoPor').textContent = info.emitido_por || '—';
+                document.getElementById('resDataHora').textContent   = info.data_hora   || '—';
+                resCard.classList.remove('hidden');
+            } else {
+                resCard.classList.add('hidden');
+            }
+
             globalResultados = data.resultados;
             renderTabela(data.resultados);
             btnOpenExport.classList.remove('hidden');
