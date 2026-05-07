@@ -92,11 +92,31 @@
                 </div>
             </div>
 
-            <!-- Banner de metadados do PDF (visível apenas quando PDF detectado) -->
+            <!-- Loading state do PDF (visível durante OCR) -->
+            <div id="pdfLoadingState" class="hidden mt-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <div class="flex items-center gap-3">
+                    <div class="w-7 h-7 bg-slate-200 rounded-lg flex items-center justify-center flex-shrink-0 animate-pulse">
+                        <i class="fas fa-file-pdf text-slate-500 text-xs"></i>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center justify-between mb-1.5">
+                            <p class="text-xs font-semibold text-slate-600">Analisando PDF...</p>
+                            <span id="pdfElapsed" class="text-[10px] font-mono text-slate-400">0s</span>
+                        </div>
+                        <!-- Barra de progresso simulada -->
+                        <div class="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                            <div id="pdfProgressBar" class="h-1.5 bg-slate-500 rounded-full transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                        <p class="text-[10px] text-slate-400 mt-1.5">Extraindo texto por OCR — pode levar alguns segundos</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Banner de metadados do PDF (visível apenas quando dados carregados) -->
             <div id="pdfInfoBanner" class="hidden mt-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                 <div class="flex items-start gap-3">
-                    <div class="w-7 h-7 bg-slate-200 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <i class="fas fa-id-card text-slate-600 text-xs"></i>
+                    <div class="w-7 h-7 bg-emerald-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <i class="fas fa-id-card text-emerald-600 text-xs"></i>
                     </div>
                     <div class="flex-1 min-w-0">
                         <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Dados detectados no PDF</p>
@@ -383,51 +403,113 @@
         hintArquivo.className = 'text-xs text-gray-400';
         document.getElementById('mainResultCard').classList.add('hidden');
         document.getElementById('resultInfoCard').classList.add('hidden');
+        _pararProgressoPdf();
         ocultarBannerPdf();
     }
 
     function ocultarBannerPdf() {
+        document.getElementById('pdfLoadingState').classList.add('hidden');
         document.getElementById('pdfInfoBanner').classList.add('hidden');
     }
 
+    let _pdfProgressTimer = null;
+    let _pdfElapsedTimer  = null;
+
+    function _iniciarProgressoPdf() {
+        // Para qualquer timer anterior
+        _pararProgressoPdf();
+
+        const bar     = document.getElementById('pdfProgressBar');
+        const elapsed = document.getElementById('pdfElapsed');
+        let pct  = 0;
+        let secs = 0;
+
+        // Progresso simulado: rápido no início, desacelera perto de 90%
+        _pdfProgressTimer = setInterval(() => {
+            const restante = 90 - pct;
+            pct += restante * 0.06;  // exponencial decrescente
+            if (pct > 89) pct = 89;
+            bar.style.width = pct.toFixed(1) + '%';
+        }, 400);
+
+        // Contador de tempo
+        _pdfElapsedTimer = setInterval(() => {
+            secs++;
+            elapsed.textContent = secs + 's';
+        }, 1000);
+    }
+
+    function _pararProgressoPdf(sucesso) {
+        clearInterval(_pdfProgressTimer);
+        clearInterval(_pdfElapsedTimer);
+        _pdfProgressTimer = null;
+        _pdfElapsedTimer  = null;
+        if (sucesso) {
+            // Completa a barra até 100%
+            const bar = document.getElementById('pdfProgressBar');
+            bar.style.width = '100%';
+            bar.classList.add('bg-emerald-500');
+        }
+    }
+
     function detectarInfoPdf(file) {
-        const banner = document.getElementById('pdfInfoBanner');
-        banner.classList.remove('hidden');
-        // Mostra estado de carregamento
-        document.getElementById('pdfCodperfil').textContent = '...';
-        document.getElementById('pdfAmbiente').textContent = '...';
-        document.getElementById('pdfModulo').textContent = '...';
-        document.getElementById('pdfEmitidoPor').textContent = '...';
-        document.getElementById('pdfDataHora').textContent = '...';
-        document.getElementById('pdfTotalFuncs').textContent = '...';
+        // Oculta banner de dados (se havia de upload anterior) e mostra loading
+        document.getElementById('pdfInfoBanner').classList.add('hidden');
         document.getElementById('pdfDetectMsg').classList.add('hidden');
+
+        const loading = document.getElementById('pdfLoadingState');
+        loading.classList.remove('hidden');
+
+        // Reseta barra
+        const bar = document.getElementById('pdfProgressBar');
+        bar.style.width = '0%';
+        bar.className = 'h-1.5 bg-slate-500 rounded-full transition-all duration-500';
+        document.getElementById('pdfElapsed').textContent = '0s';
+
+        _iniciarProgressoPdf();
 
         const fd = new FormData();
         fd.append('arquivo', file);
         fetch('/detectar_info_pdf', { method: 'POST', body: fd })
             .then(r => r.json())
             .then(data => {
-                if (data.erro) { ocultarBannerPdf(); return; }
-                document.getElementById('pdfCodperfil').textContent   = data.codperfil   || '—';
-                document.getElementById('pdfAmbiente').textContent    = data.ambiente    || '—';
-                document.getElementById('pdfModulo').textContent      = data.modulo_raw  || '—';
-                document.getElementById('pdfEmitidoPor').textContent  = data.emitido_por || '—';
-                document.getElementById('pdfDataHora').textContent    = data.data_hora   || '—';
-                document.getElementById('pdfTotalFuncs').textContent  = data.total_funcionalidades || 0;
+                _pararProgressoPdf(true);
 
-                // Auto-seleciona módulo no dropdown se detectado
-                if (data.modulo_detectado) {
-                    const sel = document.getElementById('selectModulo');
-                    for (let i = 0; i < sel.options.length; i++) {
-                        if (sel.options[i].value === data.modulo_detectado) {
-                            sel.selectedIndex = i;
-                            document.getElementById('pdfDetectMsg').classList.remove('hidden');
-                            break;
+                if (data.erro) {
+                    loading.classList.add('hidden');
+                    return;
+                }
+
+                // Pequena pausa para o usuário ver a barra cheia antes de trocar
+                setTimeout(() => {
+                    loading.classList.add('hidden');
+
+                    document.getElementById('pdfCodperfil').textContent   = data.codperfil   || '—';
+                    document.getElementById('pdfAmbiente').textContent    = data.ambiente    || '—';
+                    document.getElementById('pdfModulo').textContent      = data.modulo_raw  || '—';
+                    document.getElementById('pdfEmitidoPor').textContent  = data.emitido_por || '—';
+                    document.getElementById('pdfDataHora').textContent    = data.data_hora   || '—';
+                    document.getElementById('pdfTotalFuncs').textContent  = data.total_funcionalidades || 0;
+
+                    document.getElementById('pdfInfoBanner').classList.remove('hidden');
+
+                    // Auto-seleciona módulo no dropdown se detectado
+                    if (data.modulo_detectado) {
+                        const sel = document.getElementById('selectModulo');
+                        for (let i = 0; i < sel.options.length; i++) {
+                            if (sel.options[i].value === data.modulo_detectado) {
+                                sel.selectedIndex = i;
+                                document.getElementById('pdfDetectMsg').classList.remove('hidden');
+                                break;
+                            }
                         }
                     }
-                }
+                }, 400);
             })
-            .catch(() => ocultarBannerPdf());
+            .catch(() => {
+                _pararProgressoPdf();
+                loading.classList.add('hidden');
+            });
     }
 
     // --- Submit ---
