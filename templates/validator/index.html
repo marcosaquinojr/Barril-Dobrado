@@ -513,6 +513,15 @@
                 badge = `<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800"><i class="fas fa-times mr-1.5"></i>Divergente</span>`;
             else
                 badge = `<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800"><i class="fas fa-search mr-1.5"></i>Sugestão</span>`;
+
+            // Alerta de código desatualizado: nome encontrado no VAR mas código diferente do RM
+            const codigoAlert = row['Codigo VAR Divergente']
+                ? `<div class="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-orange-50 border border-orange-200 text-[10px] text-orange-700 font-bold">
+                       <i class="fas fa-exclamation-triangle"></i>
+                       Código RM: ${row['Codigo RM']} → VAR: ${row['ID Encontrado']}
+                   </div>`
+                : '';
+
             html += `
                 <tr class="hover:bg-slate-50 transition-colors">
                     <td class="px-6 py-3 font-medium text-slate-700 break-words">${row['Funcionalidade Analisada']}</td>
@@ -522,7 +531,11 @@
                     </td>
                     <td class="px-6 py-3 text-slate-600">
                         ${row['Sugestão Similar (VAR)']
-                            ? `<div class='flex flex-col'><span class='font-bold text-slate-900'>${row['Sugestão Similar (VAR)']}</span><span class='text-[10px] text-gray-400'>ID: ${row['ID Encontrado'] || row['ID Sugerido']}</span></div>`
+                            ? `<div class='flex flex-col'>
+                                   <span class='font-bold text-slate-900'>${row['Sugestão Similar (VAR)']}</span>
+                                   <span class='text-[10px] text-gray-400'>ID: ${row['ID Encontrado'] || row['ID Sugerido']}</span>
+                                   ${codigoAlert}
+                               </div>`
                             : '<span class="text-gray-300 italic">—</span>'}
                     </td>
                 </tr>`;

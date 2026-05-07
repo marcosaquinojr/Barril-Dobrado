@@ -1517,6 +1517,7 @@ def comparar():
         df_usr = pd.DataFrame()
         _info_pdf = {}      # metadados do PDF (vazio para Excel)
         _display_list = []  # strings de exibição por índice (código + nome)
+        _codigo_list  = []  # código RM por índice (para detectar divergência de código vs VAR)
 
         if fname.endswith('.pdf'):
             fd, tpath = tempfile.mkstemp(suffix='.pdf')
@@ -1548,6 +1549,8 @@ def comparar():
                 f"[{row['codigo']}]  {row['funcionalidade']}"
                 for _, row in df_perfil.iterrows()
             ]
+            # Códigos do RM para comparar com IDs do VAR (detecta código desatualizado)
+            _codigo_list = [str(row['codigo']).strip() for _, row in df_perfil.iterrows()]
 
         elif fname.endswith(('.xlsx', '.xls')):
             df_usr = pd.read_excel(f, usecols=[0])
@@ -1580,17 +1583,26 @@ def comparar():
                 display = _display_list[i]
             else:
                 display = df_usr.iloc[i, 0] if i < len(df_usr) else u_norm
-            item = {'id': i, 'Funcionalidade Analisada': str(display), 'Status': 'Divergente', 'ID Encontrado': '', 'ID Sugerido': '', 'Sugestão Similar (VAR)': '', 'Similaridade (%)': 0.0}
+            codigo_rm = _codigo_list[i] if _codigo_list and i < len(_codigo_list) else ''
+            item = {'id': i, 'Funcionalidade Analisada': str(display), 'Status': 'Divergente',
+                    'ID Encontrado': '', 'ID Sugerido': '', 'Sugestão Similar (VAR)': '',
+                    'Similaridade (%)': 0.0, 'Codigo RM': codigo_rm, 'Codigo VAR Divergente': False}
 
             if u_norm in v_map:
                 m = v_map[u_norm]
-                item.update({'Status': 'Encontrado', 'ID Encontrado': str(m['id']), 'Sugestão Similar (VAR)': m['orig'], 'Similaridade (%)': 100.0})
+                id_var = str(m['id']).strip()
+                item.update({'Status': 'Encontrado', 'ID Encontrado': id_var,
+                             'Sugestão Similar (VAR)': m['orig'], 'Similaridade (%)': 100.0})
+                # Detecta divergência de código: nome igual mas código RM ≠ ID no VAR
+                if codigo_rm and id_var and codigo_rm != id_var:
+                    item['Codigo VAR Divergente'] = True
             else:
                 best = process.extractOne(u_norm, v_list, scorer=fuzz.WRatio, score_cutoff=80)
                 if best:
                     sug, score, _ = best
                     m = v_map[sug]
-                    item.update({'Status': 'Divergente com Sugestão', 'ID Sugerido': str(m['id']), 'Sugestão Similar (VAR)': m['orig'], 'Similaridade (%)': round(score, 2)})
+                    item.update({'Status': 'Divergente com Sugestão', 'ID Sugerido': str(m['id']),
+                                 'Sugestão Similar (VAR)': m['orig'], 'Similaridade (%)': round(score, 2)})
             res.append(item)
 
         res.sort(key=lambda x: {'Divergente com Sugestão': 0, 'Divergente': 1, 'Encontrado': 2}.get(x['Status'], 99))
