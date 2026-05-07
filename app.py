@@ -1535,6 +1535,12 @@ def comparar():
             if mod_detectado:
                 mod = mod_detectado
 
+            # Filtra somente funcionalidades reais (≥4 segmentos no código, ex: 02.01.01.10)
+            # Códigos com menos segmentos são agrupadores do menu TOTVS, não entram no VAR
+            df_perfil = df_perfil[df_perfil['codigo'].str.count(r'\.') >= 3].reset_index(drop=True)
+            if df_perfil.empty:
+                return jsonify({'erro': "Nenhuma funcionalidade comparável encontrada no PDF (apenas agrupadores de menu)."}), 400
+
             # Coluna de matching: nome da funcionalidade
             df_usr = df_perfil[['funcionalidade']].rename(columns={'funcionalidade': 'Funcionalidade'})
             # Display inclui o código para contexto na tabela de resultados
