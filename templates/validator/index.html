@@ -92,49 +92,6 @@
                 </div>
             </div>
 
-            <!-- Loading state do PDF (visível durante OCR) -->
-            <div id="pdfLoadingState" class="hidden mt-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <div class="flex items-center gap-3">
-                    <div class="w-7 h-7 bg-slate-200 rounded-lg flex items-center justify-center flex-shrink-0 animate-pulse">
-                        <i class="fas fa-file-pdf text-slate-500 text-xs"></i>
-                    </div>
-                    <div class="flex-1 min-w-0">
-                        <div class="flex items-center justify-between mb-1.5">
-                            <p class="text-xs font-semibold text-slate-600">Analisando PDF...</p>
-                            <span id="pdfElapsed" class="text-[10px] font-mono text-slate-400">0s</span>
-                        </div>
-                        <!-- Barra de progresso simulada -->
-                        <div class="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
-                            <div id="pdfProgressBar" class="h-1.5 bg-slate-500 rounded-full transition-all duration-500" style="width: 0%"></div>
-                        </div>
-                        <p class="text-[10px] text-slate-400 mt-1.5">Extraindo texto por OCR — pode levar alguns segundos</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Banner de metadados do PDF (visível apenas quando dados carregados) -->
-            <div id="pdfInfoBanner" class="hidden mt-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <div class="flex items-start gap-3">
-                    <div class="w-7 h-7 bg-emerald-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <i class="fas fa-id-card text-emerald-600 text-xs"></i>
-                    </div>
-                    <div class="flex-1 min-w-0">
-                        <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Dados detectados no PDF</p>
-                        <div class="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
-                            <div><span class="text-slate-400">Perfil:</span> <span id="pdfCodperfil" class="font-bold text-slate-800"></span></div>
-                            <div><span class="text-slate-400">Ambiente:</span> <span id="pdfAmbiente" class="font-semibold text-slate-700"></span></div>
-                            <div class="col-span-2"><span class="text-slate-400">Módulo:</span> <span id="pdfModulo" class="font-semibold text-slate-700"></span></div>
-                            <div><span class="text-slate-400">Emitido por:</span> <span id="pdfEmitidoPor" class="text-slate-600"></span></div>
-                            <div><span class="text-slate-400">Data/Hora:</span> <span id="pdfDataHora" class="text-slate-600"></span></div>
-                        </div>
-                        <p id="pdfDetectMsg" class="hidden mt-2 text-[10px] text-emerald-700 font-bold"><i class="fas fa-check-circle mr-1"></i>Módulo auto-selecionado no dropdown acima.</p>
-                    </div>
-                    <div class="flex-shrink-0 text-right">
-                        <span id="pdfTotalFuncs" class="text-lg font-black text-slate-800"></span>
-                        <p class="text-[10px] text-slate-400 leading-none">funções</p>
-                    </div>
-                </div>
-            </div>
         </div>
 
         <!-- Botão -->
@@ -172,14 +129,16 @@
         </div>
 
         <div>
-            <div id="skeletonLoader" class="hidden p-4 space-y-2">
-                {% for _ in range(8) %}
-                <div class="flex gap-4 px-2 py-1">
-                    <div class="skeleton h-4 flex-1"></div>
-                    <div class="skeleton h-4 w-20"></div>
-                    <div class="skeleton h-4 flex-1"></div>
+            <!-- Barra de progresso durante validação -->
+            <div id="progressLoader" class="hidden p-6">
+                <div class="flex items-center justify-between mb-2">
+                    <p id="progressLabel" class="text-xs font-semibold text-slate-600">Processando...</p>
+                    <span id="progressPct" class="text-xs font-black text-slate-800 tabular-nums">0%</span>
                 </div>
-                {% endfor %}
+                <div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                    <div id="progressBar" class="h-2 bg-slate-700 rounded-full transition-all duration-500" style="width: 0%"></div>
+                </div>
+                <p class="text-[10px] text-slate-400 mt-2">PDF via OCR pode levar 15–30 s</p>
             </div>
             <div id="tableWrapper" class="w-full max-h-[500px] overflow-y-auto custom-scroll"></div>
         </div>
@@ -370,14 +329,7 @@
         if (f) { fileInput.files = e.dataTransfer.files; mostrarArquivo(f.name); }
     });
     fileInput.addEventListener('change', function() {
-        if (this.files[0]) {
-            mostrarArquivo(this.files[0].name);
-            if (this.files[0].name.toLowerCase().endsWith('.pdf')) {
-                detectarInfoPdf(this.files[0]);
-            } else {
-                ocultarBannerPdf();
-            }
-        }
+        if (this.files[0]) mostrarArquivo(this.files[0].name);
     });
 
     function mostrarArquivo(nome) {
@@ -403,113 +355,52 @@
         hintArquivo.className = 'text-xs text-gray-400';
         document.getElementById('mainResultCard').classList.add('hidden');
         document.getElementById('resultInfoCard').classList.add('hidden');
-        _pararProgressoPdf();
-        ocultarBannerPdf();
+        _pararProgresso();
     }
 
-    function ocultarBannerPdf() {
-        document.getElementById('pdfLoadingState').classList.add('hidden');
-        document.getElementById('pdfInfoBanner').classList.add('hidden');
-    }
+    // --- Barra de progresso da validação ---
+    let _progressTimer = null;
+    let _progressPct   = 0;
 
-    let _pdfProgressTimer = null;
-    let _pdfElapsedTimer  = null;
+    const ETAPAS = [
+        { limite: 20, label: 'Enviando arquivo...' },
+        { limite: 55, label: 'Extraindo texto (OCR)...' },
+        { limite: 80, label: 'Comparando com a base VAR...' },
+        { limite: 93, label: 'Finalizando...' },
+    ];
 
-    function _iniciarProgressoPdf() {
-        // Para qualquer timer anterior
-        _pararProgressoPdf();
-
-        const bar     = document.getElementById('pdfProgressBar');
-        const elapsed = document.getElementById('pdfElapsed');
-        let pct  = 0;
-        let secs = 0;
-
-        // Progresso simulado: rápido no início, desacelera perto de 90%
-        _pdfProgressTimer = setInterval(() => {
-            const restante = 90 - pct;
-            pct += restante * 0.06;  // exponencial decrescente
-            if (pct > 89) pct = 89;
-            bar.style.width = pct.toFixed(1) + '%';
-        }, 400);
-
-        // Contador de tempo
-        _pdfElapsedTimer = setInterval(() => {
-            secs++;
-            elapsed.textContent = secs + 's';
-        }, 1000);
-    }
-
-    function _pararProgressoPdf(sucesso) {
-        clearInterval(_pdfProgressTimer);
-        clearInterval(_pdfElapsedTimer);
-        _pdfProgressTimer = null;
-        _pdfElapsedTimer  = null;
-        if (sucesso) {
-            // Completa a barra até 100%
-            const bar = document.getElementById('pdfProgressBar');
-            bar.style.width = '100%';
-            bar.classList.add('bg-emerald-500');
-        }
-    }
-
-    function detectarInfoPdf(file) {
-        // Oculta banner de dados (se havia de upload anterior) e mostra loading
-        document.getElementById('pdfInfoBanner').classList.add('hidden');
-        document.getElementById('pdfDetectMsg').classList.add('hidden');
-
-        const loading = document.getElementById('pdfLoadingState');
-        loading.classList.remove('hidden');
-
-        // Reseta barra
-        const bar = document.getElementById('pdfProgressBar');
+    function _iniciarProgresso() {
+        _pararProgresso();
+        _progressPct = 0;
+        const bar   = document.getElementById('progressBar');
+        const pctEl = document.getElementById('progressPct');
+        const label = document.getElementById('progressLabel');
         bar.style.width = '0%';
-        bar.className = 'h-1.5 bg-slate-500 rounded-full transition-all duration-500';
-        document.getElementById('pdfElapsed').textContent = '0s';
+        bar.className = 'h-2 bg-slate-700 rounded-full transition-all duration-500';
+        pctEl.textContent = '0%';
 
-        _iniciarProgressoPdf();
+        _progressTimer = setInterval(() => {
+            const etapa = ETAPAS.find(e => _progressPct < e.limite) || ETAPAS[ETAPAS.length - 1];
+            label.textContent = etapa.label;
+            const restante = etapa.limite - _progressPct;
+            _progressPct += restante * 0.07;
+            if (_progressPct >= 93) _progressPct = 93;
+            bar.style.width = _progressPct.toFixed(0) + '%';
+            pctEl.textContent = _progressPct.toFixed(0) + '%';
+        }, 400);
+    }
 
-        const fd = new FormData();
-        fd.append('arquivo', file);
-        fetch('/detectar_info_pdf', { method: 'POST', body: fd })
-            .then(r => r.json())
-            .then(data => {
-                _pararProgressoPdf(true);
-
-                if (data.erro) {
-                    loading.classList.add('hidden');
-                    return;
-                }
-
-                // Pequena pausa para o usuário ver a barra cheia antes de trocar
-                setTimeout(() => {
-                    loading.classList.add('hidden');
-
-                    document.getElementById('pdfCodperfil').textContent   = data.codperfil   || '—';
-                    document.getElementById('pdfAmbiente').textContent    = data.ambiente    || '—';
-                    document.getElementById('pdfModulo').textContent      = data.modulo_raw  || '—';
-                    document.getElementById('pdfEmitidoPor').textContent  = data.emitido_por || '—';
-                    document.getElementById('pdfDataHora').textContent    = data.data_hora   || '—';
-                    document.getElementById('pdfTotalFuncs').textContent  = data.total_funcionalidades || 0;
-
-                    document.getElementById('pdfInfoBanner').classList.remove('hidden');
-
-                    // Auto-seleciona módulo no dropdown se detectado
-                    if (data.modulo_detectado) {
-                        const sel = document.getElementById('selectModulo');
-                        for (let i = 0; i < sel.options.length; i++) {
-                            if (sel.options[i].value === data.modulo_detectado) {
-                                sel.selectedIndex = i;
-                                document.getElementById('pdfDetectMsg').classList.remove('hidden');
-                                break;
-                            }
-                        }
-                    }
-                }, 400);
-            })
-            .catch(() => {
-                _pararProgressoPdf();
-                loading.classList.add('hidden');
-            });
+    function _pararProgresso(sucesso) {
+        clearInterval(_progressTimer);
+        _progressTimer = null;
+        if (sucesso) {
+            const bar   = document.getElementById('progressBar');
+            const pctEl = document.getElementById('progressPct');
+            bar.style.width = '100%';
+            bar.className = 'h-2 bg-emerald-500 rounded-full transition-all duration-300';
+            pctEl.textContent = '100%';
+            document.getElementById('progressLabel').textContent = 'Concluído!';
+        }
     }
 
     // --- Submit ---
@@ -520,9 +411,9 @@
         formData.append('arquivo_analise', fileInput.files[0]);
         formData.append('modulo', document.getElementById('selectModulo').value);
 
-        const mainCard = document.getElementById('mainResultCard');
-        const tableWrapper = document.getElementById('tableWrapper');
-        const skeleton = document.getElementById('skeletonLoader');
+        const mainCard      = document.getElementById('mainResultCard');
+        const tableWrapper  = document.getElementById('tableWrapper');
+        const progressLoader = document.getElementById('progressLoader');
         const btnOpenExport = document.getElementById('btnOpenExportModal');
 
         btnSubmit.disabled = true;
@@ -530,45 +421,66 @@
 
         mainCard.classList.remove('hidden');
         tableWrapper.innerHTML = '';
-        skeleton.classList.remove('hidden');
+        progressLoader.classList.remove('hidden');
         btnOpenExport.classList.add('hidden');
         mainCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+        _iniciarProgresso();
 
         fetch("{{ url_for('comparar') }}", { method: 'POST', body: formData })
         .then(r => r.json())
         .then(data => {
-            skeleton.classList.add('hidden');
-            btnSubmit.disabled = false;
-            btnSubmit.innerHTML = '<i class="fas fa-check-double mr-2"></i> Validar Perfil';
+            _pararProgresso(!data.erro);
 
             if (data.erro) {
-                tableWrapper.innerHTML = `<div class='p-8 text-center text-rose-500 font-bold text-sm'><i class="fas fa-bug mb-2 text-xl block"></i>${data.erro}</div>`;
+                setTimeout(() => {
+                    progressLoader.classList.add('hidden');
+                    tableWrapper.innerHTML = `<div class='p-8 text-center text-rose-500 font-bold text-sm'><i class="fas fa-bug mb-2 text-xl block"></i>${data.erro}</div>`;
+                }, 400);
+                btnSubmit.disabled = false;
+                btnSubmit.innerHTML = '<i class="fas fa-check-double mr-2"></i> Validar Perfil';
                 showToast(data.erro, 'error');
                 return;
             }
 
-            // Preenche card de metadados do PDF se disponível
-            const info = data.info_pdf || {};
-            const resCard = document.getElementById('resultInfoCard');
-            if (info.codperfil || info.ambiente || info.modulo) {
-                document.getElementById('resCodperfil').textContent  = info.codperfil   || data.modulo_usado || '—';
-                document.getElementById('resModulo').textContent     = data.modulo_usado || info.modulo || '—';
-                document.getElementById('resAmbiente').textContent   = info.ambiente    || '—';
-                document.getElementById('resEmitidoPor').textContent = info.emitido_por || '—';
-                document.getElementById('resDataHora').textContent   = info.data_hora   || '—';
-                resCard.classList.remove('hidden');
-            } else {
-                resCard.classList.add('hidden');
-            }
+            // Pequena pausa para o usuário ver 100% antes dos resultados aparecerem
+            setTimeout(() => {
+                progressLoader.classList.add('hidden');
 
-            globalResultados = data.resultados;
-            renderTabela(data.resultados);
-            btnOpenExport.classList.remove('hidden');
-            btnOpenExport.classList.add('flex');
-            showToast('Validação concluída!', 'success');
+                // Preenche metadados do PDF se disponíveis
+                const info = data.info_pdf || {};
+                const resCard = document.getElementById('resultInfoCard');
+                if (info.codperfil || info.ambiente || info.modulo_raw) {
+                    document.getElementById('resCodperfil').textContent  = info.codperfil   || '—';
+                    document.getElementById('resModulo').textContent     = data.modulo_usado || info.modulo_raw || '—';
+                    document.getElementById('resAmbiente').textContent   = info.ambiente    || '—';
+                    document.getElementById('resEmitidoPor').textContent = info.emitido_por || '—';
+                    document.getElementById('resDataHora').textContent   = info.data_hora   || '—';
+                    resCard.classList.remove('hidden');
+
+                    // Auto-seleciona módulo no dropdown se detectado
+                    if (data.modulo_usado) {
+                        const sel = document.getElementById('selectModulo');
+                        for (let i = 0; i < sel.options.length; i++) {
+                            if (sel.options[i].value === data.modulo_usado) { sel.selectedIndex = i; break; }
+                        }
+                    }
+                } else {
+                    resCard.classList.add('hidden');
+                }
+
+                globalResultados = data.resultados;
+                renderTabela(data.resultados);
+                btnOpenExport.classList.remove('hidden');
+                btnOpenExport.classList.add('flex');
+                btnSubmit.disabled = false;
+                btnSubmit.innerHTML = '<i class="fas fa-check-double mr-2"></i> Validar Perfil';
+                showToast('Validação concluída!', 'success');
+            }, 500);
         })
         .catch(() => {
-            skeleton.classList.add('hidden');
+            _pararProgresso();
+            progressLoader.classList.add('hidden');
             btnSubmit.disabled = false;
             btnSubmit.innerHTML = '<i class="fas fa-check-double mr-2"></i> Validar Perfil';
             showToast('Erro de conexão.', 'error');
